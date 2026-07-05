@@ -1,0 +1,41 @@
+workflows:
+  ios-test-build:
+    name: iOS test build - Turanské Fitko
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    scripts:
+      - name: Show project files
+        script: |
+          ls -la
+          find . -maxdepth 2 -type f | sort
+      - name: Resolve Swift packages
+        script: |
+          xcodebuild -resolvePackageDependencies \
+            -project "TuranskeFitkoApp.xcodeproj" \
+            -scheme "TuranskeFitkoApp"
+      - name: Build unsigned simulator app
+        script: |
+          xcodebuild build \
+            -project "TuranskeFitkoApp.xcodeproj" \
+            -scheme "TuranskeFitkoApp" \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/**/*.app
+      - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/**/*.dSYM
+
+  ios-release-placeholder:
+    name: iOS release/TestFlight - needs Apple signing
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+    scripts:
+      - name: Signing not configured yet
+        script: |
+          echo "This workflow is a placeholder."
+          echo "For TestFlight/App Store we must configure Apple Developer signing in Codemagic first."
+          echo "Use ios-test-build first to verify that the project builds."
