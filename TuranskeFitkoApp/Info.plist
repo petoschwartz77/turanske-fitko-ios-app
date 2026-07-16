@@ -6,6 +6,10 @@
     <string>Turanské Fitko</string>
     <key>CFBundleName</key>
     <string>TuranskeFitko</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
     <key>CFBundleIdentifier</key>
     <string>sk.turanskefitko.app</string>
     <key>CFBundleShortVersionString</key>
