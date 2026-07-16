@@ -6,6 +6,9 @@ workflows:
     environment:
       xcode: latest
     scripts:
+      - name: Generate branded app icons
+        script: |
+          python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
       - name: Show project files
         script: |
           ls -la
@@ -39,6 +42,9 @@ workflows:
         distribution_type: app_store
         bundle_identifier: sk.turanskefitko.app
     scripts:
+      - name: Generate branded app icons
+        script: |
+          python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
       - name: Resolve Swift packages
         script: |
           xcodebuild -resolvePackageDependencies \
@@ -58,6 +64,26 @@ workflows:
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
             --scheme "TuranskeFitkoApp"
+      - name: Validate signed IPA metadata
+        script: |
+          IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
+          test -n "$IPA_PATH"
+
+          VALIDATION_DIR=$(mktemp -d)
+          unzip -q "$IPA_PATH" -d "$VALIDATION_DIR"
+          APP_PATH=$(find "$VALIDATION_DIR/Payload" -maxdepth 1 -name "*.app" -print -quit)
+          test -n "$APP_PATH"
+
+          PLIST_PATH="$APP_PATH/Info.plist"
+          EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST_PATH")
+          ICON_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST_PATH")
+
+          test -x "$APP_PATH/$EXECUTABLE_NAME"
+          test "$ICON_NAME" = "AppIcon"
+          test -f "$APP_PATH/Assets.car"
+
+          echo "Validated executable: $EXECUTABLE_NAME"
+          echo "Validated icon asset: $ICON_NAME"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
