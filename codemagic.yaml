@@ -9,6 +9,15 @@ workflows:
       - name: Generate branded app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
+      - name: Prepare production release
+        script: |
+          python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
+            --web-version "6.44" \
+            --marketing-version "1.0"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.44" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          ! grep -Fq "dev.turanskefitko.sk" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
       - name: Show project files
         script: |
           ls -la
@@ -45,6 +54,16 @@ workflows:
       - name: Generate branded app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
+      - name: Prepare production release
+        script: |
+          python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
+            --web-version "6.44" \
+            --marketing-version "1.0"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.44" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          ! grep -Fq "dev.turanskefitko.sk" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
       - name: Resolve Swift packages
         script: |
           xcodebuild -resolvePackageDependencies \
@@ -77,12 +96,21 @@ workflows:
           PLIST_PATH="$APP_PATH/Info.plist"
           EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST_PATH")
           ICON_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST_PATH")
+          DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST_PATH")
+          APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH")
+          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST_PATH")
 
           test -x "$APP_PATH/$EXECUTABLE_NAME"
           test "$ICON_NAME" = "AppIcon"
+          test "$DISPLAY_NAME" = "Turanské Fitko App"
+          test "$APP_VERSION" = "1.0"
+          test "$BUNDLE_ID" = "sk.turanskefitko.app"
           test -f "$APP_PATH/Assets.car"
 
           echo "Validated executable: $EXECUTABLE_NAME"
+          echo "Validated display name: $DISPLAY_NAME"
+          echo "Validated app version: $APP_VERSION"
+          echo "Validated bundle identifier: $BUNDLE_ID"
           echo "Validated icon asset: $ICON_NAME"
     artifacts:
       - build/ios/ipa/*.ipa
