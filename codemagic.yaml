@@ -18,6 +18,7 @@ workflows:
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Show project files
         script: |
           ls -la
@@ -64,6 +65,7 @@ workflows:
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Resolve Swift packages
         script: |
           xcodebuild -resolvePackageDependencies \
@@ -99,18 +101,21 @@ workflows:
           DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST_PATH")
           APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH")
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST_PATH")
+          NON_EXEMPT_ENCRYPTION=$(/usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PLIST_PATH")
 
           test -x "$APP_PATH/$EXECUTABLE_NAME"
           test "$ICON_NAME" = "AppIcon"
           test "$DISPLAY_NAME" = "Turanské Fitko App"
           test "$APP_VERSION" = "1.0"
           test "$BUNDLE_ID" = "sk.turanskefitko.app"
+          test "$NON_EXEMPT_ENCRYPTION" = "false"
           test -f "$APP_PATH/Assets.car"
 
           echo "Validated executable: $EXECUTABLE_NAME"
           echo "Validated display name: $DISPLAY_NAME"
           echo "Validated app version: $APP_VERSION"
           echo "Validated bundle identifier: $BUNDLE_ID"
+          echo "Validated non-exempt encryption: $NON_EXEMPT_ENCRYPTION"
           echo "Validated icon asset: $ICON_NAME"
     artifacts:
       - build/ios/ipa/*.ipa
