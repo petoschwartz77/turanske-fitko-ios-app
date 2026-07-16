@@ -61,6 +61,7 @@ def main() -> None:
     plist["CFBundleIconName"] = "AppIcon"
     plist["CFBundleIdentifier"] = "sk.turanskefitko.app"
     plist["CFBundleShortVersionString"] = args.marketing_version
+    plist["ITSAppUsesNonExemptEncryption"] = False
 
     with info_plist.open("wb") as handle:
         plistlib.dump(plist, handle, fmt=plistlib.FMT_XML, sort_keys=False)
@@ -68,6 +69,7 @@ def main() -> None:
     print(f"Prepared production URL: {production_url}")
     print(f"Prepared display name: {plist['CFBundleDisplayName']}")
     print(f"Prepared marketing version: {plist['CFBundleShortVersionString']}")
+    print("Prepared export compliance: non-exempt encryption = false")
 
 
 if __name__ == "__main__":
