@@ -27,15 +27,41 @@ workflows:
       - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/**/*.app
       - ~/Library/Developer/Xcode/DerivedData/**/Build/Products/**/*.dSYM
 
-  ios-release-placeholder:
-    name: iOS release/TestFlight - needs Apple signing
+  ios-testflight:
+    name: iOS TestFlight - Turanské Fitko
     max_build_duration: 60
     instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: "Codemagic Turanské Fitko"
     environment:
       xcode: latest
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: sk.turanskefitko.app
     scripts:
-      - name: Signing not configured yet
+      - name: Resolve Swift packages
         script: |
-          echo "This workflow is a placeholder."
-          echo "For TestFlight/App Store we must configure Apple Developer signing in Codemagic first."
-          echo "Use ios-test-build first to verify that the project builds."
+          xcodebuild -resolvePackageDependencies \
+            -project "TuranskeFitkoApp.xcodeproj" \
+            -scheme "TuranskeFitkoApp"
+      - name: Set unique build number
+        script: |
+          BUILD_NUMBER=$(date -u +%Y%m%d%H%M)
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist"
+          echo "Using build number: $BUILD_NUMBER"
+      - name: Set up code signing
+        script: |
+          xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
+            --scheme "TuranskeFitkoApp"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM
+    publishing:
+      app_store_connect:
+        auth: integration
