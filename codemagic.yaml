@@ -12,9 +12,9 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "6.44" \
+            --web-version "6.58" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.44" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
@@ -58,9 +58,9 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "6.44" \
+            --web-version "6.58" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.44" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
