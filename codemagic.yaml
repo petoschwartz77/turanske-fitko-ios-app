@@ -128,7 +128,7 @@ workflows:
   android-nfc-alpha:
     name: Android NFC Alpha - Turanské Fitko
     max_build_duration: 30
-    instance_type: linux_x2
+    instance_type: mac_mini_m2
     environment:
       java: 17
       android_signing:
