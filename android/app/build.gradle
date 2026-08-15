@@ -1,0 +1,38 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'sk.turanskefitko.manager'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'sk.turanskefitko.manager'
+        minSdk 23
+        targetSdk 35
+        versionCode 3
+        versionName '2.1'
+    }
+
+    signingConfigs {
+        release {
+            if (System.getenv('CI')) {
+                storeFile file(System.getenv('CM_KEYSTORE_PATH'))
+                storePassword System.getenv('CM_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('CM_KEY_ALIAS')
+                keyPassword System.getenv('CM_KEY_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
