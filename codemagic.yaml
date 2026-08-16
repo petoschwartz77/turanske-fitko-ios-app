@@ -32,7 +32,7 @@ workflows:
         script: |
           xcodebuild build \
             -project "TuranskeFitkoApp.xcodeproj" \
-            -scheme "TuranskeFitkoApp"
+            -scheme "TuranskeFitkoApp" \
             -sdk iphonesimulator \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO
