@@ -32,7 +32,7 @@ workflows:
         script: |
           xcodebuild build \
             -project "TuranskeFitkoApp.xcodeproj" \
-            -scheme "TuranskeFitkoApp" \
+            -scheme "TuranskeFitkoApp"
             -sdk iphonesimulator \
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO
@@ -134,7 +134,7 @@ workflows:
       android_signing:
         - turanske_fitko_upload
     scripts:
-      - name: Verify Android NFC release configuration
+      - name: Verify Android App Links release configuration
         script: |
           set -e
           test -f "$CM_BUILD_DIR/android/app/build.gradle"
@@ -144,7 +144,8 @@ workflows:
           grep -Fq "versionCode 3" "$CM_BUILD_DIR/android/app/build.gradle"
           grep -Fq 'android:autoVerify="true"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           grep -Fq 'android:host="turanskefitko.sk"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
-          grep -Fq 'android:pathPrefix="/tfm-app/nfc/"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
+          grep -Fq 'android:pathPrefix="/tfm-app/"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
+          grep -Fq 'APP_PATH_PREFIX = "/tfm-app/"' "$CM_BUILD_DIR/android/app/src/main/java/sk/turanskefitko/manager/MainActivity.java"
           test -n "$CM_KEYSTORE_PATH"
           test -n "$CM_KEYSTORE_PASSWORD"
           test -n "$CM_KEY_ALIAS"
