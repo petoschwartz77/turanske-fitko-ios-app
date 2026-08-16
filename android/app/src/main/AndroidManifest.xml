@@ -20,6 +20,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- v3: one verified App Link covers NFC check-in and passwordless login links. -->
             <intent-filter android:autoVerify="true">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -27,7 +28,7 @@
                 <data
                     android:scheme="https"
                     android:host="turanskefitko.sk"
-                    android:pathPrefix="/tfm-app/nfc/" />
+                    android:pathPrefix="/tfm-app/" />
             </intent-filter>
         </activity>
     </application>
