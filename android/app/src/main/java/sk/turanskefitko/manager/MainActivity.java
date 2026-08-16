@@ -20,7 +20,7 @@ import android.widget.FrameLayout;
 public class MainActivity extends Activity {
     private static final String APP_URL = "https://turanskefitko.sk/tfm-app/?native=android";
     private static final String APP_HOST = "turanskefitko.sk";
-    private static final String NFC_PATH_PREFIX = "/tfm-app/nfc/";
+    private static final String APP_PATH_PREFIX = "/tfm-app/";
 
     private WebView webView;
 
@@ -49,7 +49,7 @@ public class MainActivity extends Activity {
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setUserAgentString(settings.getUserAgentString() + " TFMAndroidApp/3.0 TuranskeFitko/NFC-AppLinks");
+        settings.setUserAgentString(settings.getUserAgentString() + " TFMAndroidApp/3.0 TuranskeFitko/AppLinks");
 
         CookieManager cookies = CookieManager.getInstance();
         cookies.setAcceptCookie(true);
@@ -91,24 +91,37 @@ public class MainActivity extends Activity {
         openFromIntentOrHome(intent);
     }
 
+    @Override
+    protected void onPause() {
+        CookieManager.getInstance().flush();
+        super.onPause();
+    }
+
+    @Override
+    protected void onStop() {
+        CookieManager.getInstance().flush();
+        super.onStop();
+    }
+
     private void openFromIntentOrHome(Intent intent) {
         Uri data = intent != null ? intent.getData() : null;
-        if (isNfcAppLink(data)) {
+        if (isAppLink(data)) {
+            // Keep the full HTTPS URL including query parameters. This supports
+            // both /tfm-app/nfc/... and one-time passwordless login links.
             webView.loadUrl(data.toString());
         } else if (webView.getUrl() == null || webView.getUrl().isEmpty()) {
             webView.loadUrl(APP_URL);
         }
     }
 
-    private boolean isNfcAppLink(Uri uri) {
+    private boolean isAppLink(Uri uri) {
         if (uri == null) return false;
         String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
         String path = uri.getPath() == null ? "" : uri.getPath();
         return "https".equals(scheme)
                 && APP_HOST.equals(host)
-                && path.startsWith(NFC_PATH_PREFIX)
-                && path.length() > NFC_PATH_PREFIX.length();
+                && path.startsWith(APP_PATH_PREFIX);
     }
 
     private boolean handleUrl(String url) {
