@@ -24,51 +24,8 @@ workflows:
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Verify iOS release configuration
         script: |
-          set -e
-          python3 - <<'PY'
-          import json
-          import plistlib
-          from pathlib import Path
-
-          root = Path("$CM_BUILD_DIR")
-          info_path = root / "TuranskeFitkoApp" / "Info.plist"
-          entitlements_path = root / "TuranskeFitkoApp" / "TuranskeFitkoApp.entitlements"
-          project_path = root / "TuranskeFitkoApp.xcodeproj" / "project.pbxproj"
-          icons_path = root / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset" / "Contents.json"
-
-          with info_path.open("rb") as f:
-              info = plistlib.load(f)
-          with entitlements_path.open("rb") as f:
-              entitlements = plistlib.load(f)
-          project = project_path.read_text(encoding="utf-8")
-          icons = json.loads(icons_path.read_text(encoding="utf-8"))
-
-          assert info["CFBundleShortVersionString"] == "1.1"
-          assert info["CFBundleIdentifier"] == "sk.turanskefitko.app"
-          assert info["ITSAppUsesNonExemptEncryption"] is False
-          assert project.count('TARGETED_DEVICE_FAMILY = "1,2";') >= 2
-          assert project.count('MARKETING_VERSION = 1.1;') >= 2
-
-          required_orientations = {
-              "UIInterfaceOrientationPortrait",
-              "UIInterfaceOrientationPortraitUpsideDown",
-              "UIInterfaceOrientationLandscapeLeft",
-              "UIInterfaceOrientationLandscapeRight",
-          }
-          assert set(info.get("UISupportedInterfaceOrientations~ipad", [])) == required_orientations
-          assert "applinks:turanskefitko.sk" in entitlements.get("com.apple.developer.associated-domains", [])
-
-          ipad_slots = {
-              (item.get("size"), item.get("scale"), item.get("filename"))
-              for item in icons.get("images", []) if item.get("idiom") == "ipad"
-          }
-          assert ("76x76", "2x", "AppIcon-152.png") in ipad_slots
-          assert ("83.5x83.5", "2x", "AppIcon-167.png") in ipad_slots
-          assert (root / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset" / "AppIcon-152.png").is_file()
-          assert (root / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset" / "AppIcon-167.png").is_file()
-
-          print("iOS preflight OK: iPhone+iPad, four iPad orientations, NFC Associated Domains, version 1.1, iPad icons.")
-          PY
+          cd "$CM_BUILD_DIR"
+          python3 scripts/verify_ios_release.py source --root "$CM_BUILD_DIR" --marketing-version "1.1"
       - name: Show project files
         script: |
           ls -la
@@ -121,51 +78,8 @@ workflows:
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Verify iOS release configuration
         script: |
-          set -e
-          python3 - <<'PY'
-          import json
-          import plistlib
-          from pathlib import Path
-
-          root = Path("$CM_BUILD_DIR")
-          info_path = root / "TuranskeFitkoApp" / "Info.plist"
-          entitlements_path = root / "TuranskeFitkoApp" / "TuranskeFitkoApp.entitlements"
-          project_path = root / "TuranskeFitkoApp.xcodeproj" / "project.pbxproj"
-          icons_path = root / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset" / "Contents.json"
-
-          with info_path.open("rb") as f:
-              info = plistlib.load(f)
-          with entitlements_path.open("rb") as f:
-              entitlements = plistlib.load(f)
-          project = project_path.read_text(encoding="utf-8")
-          icons = json.loads(icons_path.read_text(encoding="utf-8"))
-
-          assert info["CFBundleShortVersionString"] == "1.1"
-          assert info["CFBundleIdentifier"] == "sk.turanskefitko.app"
-          assert info["ITSAppUsesNonExemptEncryption"] is False
-          assert project.count('TARGETED_DEVICE_FAMILY = "1,2";') >= 2
-          assert project.count('MARKETING_VERSION = 1.1;') >= 2
-
-          required_orientations = {
-              "UIInterfaceOrientationPortrait",
-              "UIInterfaceOrientationPortraitUpsideDown",
-              "UIInterfaceOrientationLandscapeLeft",
-              "UIInterfaceOrientationLandscapeRight",
-          }
-          assert set(info.get("UISupportedInterfaceOrientations~ipad", [])) == required_orientations
-          assert "applinks:turanskefitko.sk" in entitlements.get("com.apple.developer.associated-domains", [])
-
-          ipad_slots = {
-              (item.get("size"), item.get("scale"), item.get("filename"))
-              for item in icons.get("images", []) if item.get("idiom") == "ipad"
-          }
-          assert ("76x76", "2x", "AppIcon-152.png") in ipad_slots
-          assert ("83.5x83.5", "2x", "AppIcon-167.png") in ipad_slots
-          assert (root / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset" / "AppIcon-152.png").is_file()
-          assert (root / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset" / "AppIcon-167.png").is_file()
-
-          print("iOS preflight OK: iPhone+iPad, four iPad orientations, NFC Associated Domains, version 1.1, iPad icons.")
-          PY
+          cd "$CM_BUILD_DIR"
+          python3 scripts/verify_ios_release.py source --root "$CM_BUILD_DIR" --marketing-version "1.1"
       - name: Resolve Swift packages
         script: |
           xcodebuild -resolvePackageDependencies \
@@ -190,57 +104,8 @@ workflows:
           set -e
           IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
           test -n "$IPA_PATH"
-
-          VALIDATION_DIR=$(mktemp -d)
-          unzip -q "$IPA_PATH" -d "$VALIDATION_DIR"
-          APP_PATH=$(find "$VALIDATION_DIR/Payload" -maxdepth 1 -name "*.app" -print -quit)
-          test -n "$APP_PATH"
-
-          PLIST_PATH="$APP_PATH/Info.plist"
-          EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST_PATH")
-          ICON_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST_PATH")
-          DISPLAY_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST_PATH")
-          APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH")
-          BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST_PATH")
-          NON_EXEMPT_ENCRYPTION=$(/usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PLIST_PATH")
-
-          test -x "$APP_PATH/$EXECUTABLE_NAME"
-          test "$ICON_NAME" = "AppIcon"
-          test "$DISPLAY_NAME" = "Turanské Fitko App"
-          test "$APP_VERSION" = "1.1"
-          test "$BUNDLE_ID" = "sk.turanskefitko.app"
-          test "$NON_EXEMPT_ENCRYPTION" = "false"
-          test -f "$APP_PATH/Assets.car"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily:0' "$PLIST_PATH")" = "1"
-          test "$(/usr/libexec/PlistBuddy -c 'Print :UIDeviceFamily:1' "$PLIST_PATH")" = "2"
-
-          python3 - "$PLIST_PATH" <<'PY'
-          import plistlib
-          import sys
-          with open(sys.argv[1], "rb") as f:
-              info = plistlib.load(f)
-          required = {
-              "UIInterfaceOrientationPortrait",
-              "UIInterfaceOrientationPortraitUpsideDown",
-              "UIInterfaceOrientationLandscapeLeft",
-              "UIInterfaceOrientationLandscapeRight",
-          }
-          actual = set(info.get("UISupportedInterfaceOrientations~ipad", []))
-          assert actual == required, (actual, required)
-          print("Validated compiled iPad orientations and device family.")
-          PY
-
-          ENTITLEMENTS_PATH="$VALIDATION_DIR/signed-entitlements.plist"
-          codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null
-          grep -Fq "applinks:turanskefitko.sk" "$ENTITLEMENTS_PATH"
-
-          echo "Validated executable: $EXECUTABLE_NAME"
-          echo "Validated display name: $DISPLAY_NAME"
-          echo "Validated app version: $APP_VERSION"
-          echo "Validated bundle identifier: $BUNDLE_ID"
-          echo "Validated non-exempt encryption: $NON_EXEMPT_ENCRYPTION"
-          echo "Validated icon asset: $ICON_NAME"
-          echo "Validated signed Associated Domains entitlement and iPhone+iPad support."
+          cd "$CM_BUILD_DIR"
+          python3 scripts/verify_ios_release.py ipa --ipa "$IPA_PATH" --marketing-version "1.1"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
