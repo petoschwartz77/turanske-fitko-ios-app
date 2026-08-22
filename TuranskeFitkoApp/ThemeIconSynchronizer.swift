@@ -16,7 +16,8 @@ final class ThemeIconSynchronizer {
     func start() {
         guard timer == nil else { return }
         syncNow()
-        let timer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { _ in
+
+        let timer = Timer(timeInterval: 0.75, repeats: true) { _ in
             Task { @MainActor in
                 ThemeIconSynchronizer.shared.syncNow()
             }
@@ -66,8 +67,8 @@ final class ThemeIconSynchronizer {
             return
         }
 
-        // One icon-change request per actual theme change. If the system/user
-        // rejects the switch, do not spam the same request on every timer tick.
+        // One icon-change request per actual theme change. If iOS/user rejects
+        // the same switch, do not retry it every 0.75 s.
         guard lastAttemptedTheme != theme else { return }
         lastAttemptedTheme = theme
         isApplying = true
