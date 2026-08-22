@@ -9,6 +9,9 @@ struct TuranskeFitkoApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    ThemeIconSynchronizer.shared.start()
+                }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     guard let url = activity.webpageURL else { return }
                     _ = UniversalLinkRouter.handle(url)
