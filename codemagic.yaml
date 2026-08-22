@@ -6,12 +6,9 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Generate branded app icons
+      - name: Generate final primary and pink app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
-      - name: Generate complete iPhone and iPad icons
-        script: |
-          python3 "$CM_BUILD_DIR/scripts/generate_ipad_icons.py"
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
@@ -59,12 +56,9 @@ workflows:
         distribution_type: app_store
         bundle_identifier: sk.turanskefitko.app
     scripts:
-      - name: Generate branded app icons
+      - name: Generate final primary and pink app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
-      - name: Generate complete iPhone and iPad icons
-        script: |
-          python3 "$CM_BUILD_DIR/scripts/generate_ipad_icons.py"
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
