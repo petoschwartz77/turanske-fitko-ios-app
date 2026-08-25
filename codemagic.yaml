@@ -12,14 +12,18 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.20" \
+            --web-version "9.21" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.20" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.21" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "<string>applinks:turanskefitko.sk</string>" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
+          grep -Fq "final class AppDelegate: UIResponder, UIApplicationDelegate" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "tfma_native_json" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Show project files
         script: |
@@ -60,14 +64,18 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.20" \
+            --web-version "9.21" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.20" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.21" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "<string>applinks:turanskefitko.sk</string>" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
+          grep -Fq "final class AppDelegate: UIResponder, UIApplicationDelegate" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "tfma_native_json" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Resolve Swift packages

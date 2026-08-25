@@ -2,7 +2,45 @@ import SwiftUI
 import UIKit
 import WebKit
 
-final class AppDelegate: NSObject, UIApplicationDelegate {
+@main
+final class AppDelegate: UIResponder, UIApplicationDelegate {
+    var window: UIWindow?
+
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        let window = UIWindow(frame: UIScreen.main.bounds)
+        let rootView = ContentView().preferredColorScheme(.dark)
+        let controller = UIHostingController(rootView: rootView)
+        controller.view.backgroundColor = .black
+        window.rootViewController = controller
+        self.window = window
+        window.makeKeyAndVisible()
+
+        // No UIScene lifecycle on purpose. Universal Links are handled centrally by AppDelegate,
+        // which avoids losing the NFC activity during SwiftUI scene creation / cold launch.
+        if let url = launchOptions?[.url] as? URL {
+            DispatchQueue.main.async {
+                NFCDeepLinkRouter.handle(url, source: "launchOptionsURL")
+            }
+        }
+
+        if let activityDictionary = launchOptions?[.userActivityDictionary] as? [AnyHashable: Any] {
+            for value in activityDictionary.values {
+                guard let activity = value as? NSUserActivity,
+                      activity.activityType == NSUserActivityTypeBrowsingWeb,
+                      let url = activity.webpageURL else { continue }
+                DispatchQueue.main.async {
+                    NFCDeepLinkRouter.handle(url, source: "launchOptionsUserActivity")
+                }
+                break
+            }
+        }
+
+        return true
+    }
+
     func application(
         _ application: UIApplication,
         continue userActivity: NSUserActivity,
@@ -12,8 +50,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
               let url = userActivity.webpageURL else {
             return false
         }
-        NFCDeepLinkRouter.handle(url, source: "appDelegateUserActivity")
-        return true
+        return NFCDeepLinkRouter.handle(url, source: "continueUserActivity")
     }
 
     func application(
@@ -21,76 +58,52 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         open url: URL,
         options: [UIApplication.OpenURLOptionsKey: Any] = [:]
     ) -> Bool {
-        NFCDeepLinkRouter.handle(url, source: "appDelegateOpenURL")
-        return true
+        return NFCDeepLinkRouter.handle(url, source: "openURL")
     }
 }
 
-@main
-struct TuranskeFitkoApp: App {
-    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-
-    var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .preferredColorScheme(.dark)
-                .onOpenURL { url in
-                    NFCDeepLinkRouter.handle(url, source: "swiftUIOpenURL")
-                }
-                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
-                    guard let url = activity.webpageURL else { return }
-                    NFCDeepLinkRouter.handle(url, source: "swiftUIUniversalLink")
-                }
-        }
-    }
-}
-
-/// Native handoff for the NFC Universal Link.
-///
-/// The app is a SwiftUI + WKWebView wrapper. iOS can launch the native shell for a verified
-/// Universal Link without automatically navigating the existing WKWebView. We therefore catch
-/// the URL through both SwiftUI and UIApplicationDelegate, show an immediate native confirmation,
-/// then force the same logged-in WKWebView to the NFC endpoint. The server renders the final
-/// result modal (success, duplicate, unlinked membership, owner info, etc.).
 enum NFCDeepLinkRouter {
     private static let allowedHost = "turanskefitko.sk"
     private static var pendingURL: URL?
-    private static var retryWorkItem: DispatchWorkItem?
+    private static var webViewRetryWorkItem: DispatchWorkItem?
+    private static var requestTimeoutWorkItem: DispatchWorkItem?
     private static var lastFingerprint = ""
     private static var lastHandledAt: TimeInterval = 0
+    private static var activeRequestID = UUID()
 
-    static func handle(_ incomingURL: URL, source: String) {
+    @discardableResult
+    static func handle(_ incomingURL: URL, source: String) -> Bool {
+        guard let targetURL = normalizedNFCURL(from: incomingURL) else {
+            print("[TF NFC 9.21] Ignored non-NFC URL from \(source): \(incomingURL.absoluteString)")
+            return false
+        }
+
         DispatchQueue.main.async {
-            guard let targetURL = normalizedNFCURL(from: incomingURL) else {
-                print("[TF NFC] Ignored non-NFC URL from \(source): \(incomingURL.absoluteString)")
-                return
-            }
-
             let fingerprint = canonicalFingerprint(for: incomingURL)
             let now = Date().timeIntervalSince1970
-            if fingerprint == lastFingerprint, now - lastHandledAt < 1.0 {
-                print("[TF NFC] Ignored duplicate delivery from \(source)")
+            if fingerprint == lastFingerprint, now - lastHandledAt < 1.25 {
+                print("[TF NFC 9.21] Ignored duplicate delivery from \(source)")
                 return
             }
             lastFingerprint = fingerprint
             lastHandledAt = now
 
-            NFCNativeOverlay.shared.show(
-                title: "NFC načítané",
-                message: "Spracúvam vstup…",
-                state: .loading
-            )
-
+            let requestID = UUID()
+            activeRequestID = requestID
             pendingURL = targetURL
-            retryWorkItem?.cancel()
-            retryWorkItem = nil
-            openPendingURL(attempt: 0)
+            webViewRetryWorkItem?.cancel()
+            requestTimeoutWorkItem?.cancel()
+            webViewRetryWorkItem = nil
+            requestTimeoutWorkItem = nil
+
+            NFCNativeModal.shared.showLoading()
+            armGlobalTimeout(for: requestID)
+            processPendingURL(requestID: requestID, attempt: 0)
+            print("[TF NFC 9.21] Accepted NFC Universal Link from \(source): \(incomingURL.path)")
         }
+        return true
     }
 
-    /// Native validation is deliberately broad. The server is the source of truth for token
-    /// validity. Rejecting token shape in the native shell can silently drop a perfectly valid
-    /// NFC tag after a future server-side token format change.
     private static func normalizedNFCURL(from incomingURL: URL) -> URL? {
         guard incomingURL.scheme?.lowercased() == "https" else { return nil }
 
@@ -104,17 +117,25 @@ enum NFCDeepLinkRouter {
         guard var components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: false) else {
             return nil
         }
-        var queryItems = components.queryItems ?? []
-        let reserved = Set(["tfma_nfc_app", "native", "tfma_native_handoff", "tfma_nocache"])
-        queryItems.removeAll { reserved.contains($0.name) }
-        queryItems.append(URLQueryItem(name: "tfma_nfc_app", value: "1"))
-        queryItems.append(URLQueryItem(name: "native", value: "ios"))
-        queryItems.append(URLQueryItem(name: "tfma_native_handoff", value: "1"))
-        queryItems.append(URLQueryItem(
+
+        var items = components.queryItems ?? []
+        let reserved = Set([
+            "tfma_nfc_app",
+            "tfma_native_handoff",
+            "tfma_native_json",
+            "native",
+            "tfma_nocache"
+        ])
+        items.removeAll { reserved.contains($0.name) }
+        items.append(URLQueryItem(name: "tfma_nfc_app", value: "1"))
+        items.append(URLQueryItem(name: "tfma_native_handoff", value: "1"))
+        items.append(URLQueryItem(name: "tfma_native_json", value: "1"))
+        items.append(URLQueryItem(name: "native", value: "ios"))
+        items.append(URLQueryItem(
             name: "tfma_nocache",
             value: String(Int(Date().timeIntervalSince1970 * 1000))
         ))
-        components.queryItems = queryItems
+        components.queryItems = items
         return components.url
     }
 
@@ -124,116 +145,221 @@ enum NFCDeepLinkRouter {
         return "\(host)|\(url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")))"
     }
 
-    private static func openPendingURL(attempt: Int) {
-        guard let targetURL = pendingURL else { return }
+    private static func processPendingURL(requestID: UUID, attempt: Int) {
+        guard requestID == activeRequestID, let targetURL = pendingURL else { return }
 
-        if let webView = locateWebView() {
-            pendingURL = nil
-            retryWorkItem?.cancel()
-            retryWorkItem = nil
-
-            webView.stopLoading()
-            let request = URLRequest(
-                url: targetURL,
-                cachePolicy: .reloadIgnoringLocalCacheData,
-                timeoutInterval: 30
-            )
-            webView.load(request)
-            print("[TF NFC] Forced WKWebView navigation to: \(targetURL.absoluteString)")
-            verifyServerPopup(in: webView, attempt: 0)
+        guard let webView = locateWebView() else {
+            guard attempt < 100 else {
+                fail(
+                    requestID: requestID,
+                    title: "NFC sa nepodarilo spracovať",
+                    message: "Appka sa otvorila, ale vnútorné prihlásené okno nebolo pripravené. Prilož tag ešte raz."
+                )
+                return
+            }
+            let item = DispatchWorkItem {
+                processPendingURL(requestID: requestID, attempt: attempt + 1)
+            }
+            webViewRetryWorkItem = item
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: item)
             return
         }
 
-        // Cold launch can deliver the Universal Link before SwiftUI has mounted WKWebView.
-        guard attempt < 80 else {
-            pendingURL = nil
-            NFCNativeOverlay.shared.show(
-                title: "NFC sa nepodarilo otvoriť",
-                message: "Appka sa otvorila, ale vnútorné okno ešte nebolo pripravené. Prilož tag ešte raz.",
-                state: .error
-            )
-            NFCNativeOverlay.shared.dismiss(after: 4.0)
-            print("[TF NFC] WKWebView not found after cold-launch retry window")
-            return
-        }
-
-        let workItem = DispatchWorkItem {
-            openPendingURL(attempt: attempt + 1)
-        }
-        retryWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.10, execute: workItem)
+        pendingURL = nil
+        webViewRetryWorkItem?.cancel()
+        webViewRetryWorkItem = nil
+        performNativeJSONRequest(targetURL, in: webView, requestID: requestID, attempt: 0)
     }
 
-    /// The web result page contains #tfma811-title and body[data-state]. Polling it gives us a
-    /// second confirmation path. If the web modal renders, the temporary native overlay disappears.
-    /// If it never renders, the user still gets a visible error instead of a silent home screen.
-    private static func verifyServerPopup(in webView: WKWebView, attempt: Int) {
+    /// Executes the NFC request inside the *already authenticated* WKWebView JavaScript context.
+    /// This is intentionally different from navigating WKWebView: the visible Home screen never
+    /// moves, WordPress receives the exact login cookies, and the native app receives only JSON.
+    private static func performNativeJSONRequest(
+        _ targetURL: URL,
+        in webView: WKWebView,
+        requestID: UUID,
+        attempt: Int
+    ) {
+        guard requestID == activeRequestID else { return }
+
         let script = #"""
-        (() => {
-          const title = document.querySelector('#tfma811-title');
-          return JSON.stringify({
-            title: title ? String(title.textContent || '').trim() : '',
-            state: document.body ? String(document.body.getAttribute('data-state') || '') : '',
-            path: String(location.pathname || '')
-          });
-        })();
+        const target = String(nfcURL || '');
+        let theme = '';
+        try { theme = String(localStorage.getItem('tfma85_theme') || ''); } catch (_) {}
+
+        try {
+            const response = await fetch(target, {
+                method: 'GET',
+                credentials: 'include',
+                cache: 'no-store',
+                redirect: 'follow',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-TFMA-Native-NFC': 'ios-9.21'
+                }
+            });
+            const text = await response.text();
+            return JSON.stringify({
+                transportOK: response.ok,
+                http: response.status,
+                finalURL: String(response.url || ''),
+                contentType: String(response.headers.get('content-type') || ''),
+                theme,
+                body: text
+            });
+        } catch (error) {
+            return JSON.stringify({
+                transportOK: false,
+                http: 0,
+                finalURL: '',
+                contentType: '',
+                theme,
+                body: '',
+                jsError: String(error && error.message ? error.message : error)
+            });
+        }
         """#
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + (attempt == 0 ? 0.55 : 0.40)) {
-            webView.evaluateJavaScript(script) { result, _ in
+        if #available(iOS 15.0, *) {
+            webView.callAsyncJavaScript(
+                script,
+                arguments: ["nfcURL": targetURL.absoluteString],
+                in: nil,
+                contentWorld: .page
+            ) { result in
                 DispatchQueue.main.async {
-                    if let json = result as? String,
-                       let data = json.data(using: .utf8),
-                       let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                        let title = (object["title"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                        let state = (object["state"] as? String ?? "").lowercased()
-                        let path = (object["path"] as? String ?? "").lowercased()
-
-                        if !title.isEmpty && path.hasPrefix("/tfm-app/nfc/") {
-                            let overlayState: NFCNativeOverlay.State = (state == "error") ? .error : .success
-                            NFCNativeOverlay.shared.show(
-                                title: title,
-                                message: "Potvrdené serverom",
-                                state: overlayState
-                            )
-                            NFCNativeOverlay.shared.dismiss(after: 0.55)
-                            print("[TF NFC] Server popup confirmed: \(title)")
+                    guard requestID == activeRequestID else { return }
+                    switch result {
+                    case .success(let value):
+                        if let raw = value as? String, consumeTransportJSON(raw, requestID: requestID) {
                             return
                         }
-                    }
-
-                    if attempt < 18 {
-                        verifyServerPopup(in: webView, attempt: attempt + 1)
-                    } else {
-                        NFCNativeOverlay.shared.show(
-                            title: "NFC bez potvrdenia",
-                            message: "Tag appku otvoril, ale server neposlal výsledok. Prilož tag ešte raz.",
-                            state: .error
-                        )
-                        NFCNativeOverlay.shared.dismiss(after: 4.0)
-                        print("[TF NFC] Server popup was not detected")
+                        retryOrFail(targetURL, webView: webView, requestID: requestID, attempt: attempt, reason: "Neplatná odpoveď WebView")
+                    case .failure(let error):
+                        retryOrFail(targetURL, webView: webView, requestID: requestID, attempt: attempt, reason: error.localizedDescription)
                     }
                 }
             }
+        } else {
+            fail(
+                requestID: requestID,
+                title: "NFC vyžaduje novší iOS",
+                message: "Aktualizuj iPhone na iOS 15 alebo novší."
+            )
         }
     }
 
-    private static func locateWebView() -> WKWebView? {
-        let scenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .filter { $0.activationState != .unattached }
-
-        let windows = scenes.flatMap(\.windows).sorted { lhs, rhs in
-            if lhs.isKeyWindow != rhs.isKeyWindow { return lhs.isKeyWindow }
-            return lhs.windowLevel.rawValue > rhs.windowLevel.rawValue
-        }
-
-        for window in windows {
-            if let webView = findWebView(in: window) {
-                return webView
+    private static func retryOrFail(
+        _ targetURL: URL,
+        webView: WKWebView,
+        requestID: UUID,
+        attempt: Int,
+        reason: String
+    ) {
+        guard requestID == activeRequestID else { return }
+        if attempt < 5 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                performNativeJSONRequest(targetURL, in: webView, requestID: requestID, attempt: attempt + 1)
             }
+            return
         }
-        return nil
+        fail(
+            requestID: requestID,
+            title: "NFC bez potvrdenia",
+            message: "Server sa nepodarilo overiť. Skús tag priložiť ešte raz. (\(reason))"
+        )
+    }
+
+    @discardableResult
+    private static func consumeTransportJSON(_ raw: String, requestID: UUID) -> Bool {
+        guard let rawData = raw.data(using: .utf8),
+              let transport = try? JSONSerialization.jsonObject(with: rawData) as? [String: Any] else {
+            return false
+        }
+
+        let theme = (transport["theme"] as? String ?? "").lowercased()
+        NFCNativeModal.shared.setTheme(theme)
+
+        let finalURL = transport["finalURL"] as? String ?? ""
+        let body = transport["body"] as? String ?? ""
+        let jsError = transport["jsError"] as? String ?? ""
+
+        guard jsError.isEmpty else { return false }
+
+        guard let bodyData = body.data(using: .utf8),
+              let payload = try? JSONSerialization.jsonObject(with: bodyData) as? [String: Any] else {
+            if finalURL.contains("/tfm-app/") && !finalURL.contains("/tfm-app/nfc/") {
+                fail(
+                    requestID: requestID,
+                    title: "Prihlásenie je potrebné",
+                    message: "Prihlás sa do Turanské Fitko App a potom prilož NFC tag znova."
+                )
+                return true
+            }
+            return false
+        }
+
+        let ok = payload["ok"] as? Bool ?? false
+        let state = (payload["state"] as? String ?? "error").lowercased()
+        let title = payload["title"] as? String ?? "NFC výsledok"
+        let message = payload["message"] as? String ?? ""
+        let seconds = max(2, min(8, payload["return_seconds"] as? Int ?? 4))
+
+        guard ok else {
+            fail(
+                requestID: requestID,
+                title: title.isEmpty ? "NFC bez potvrdenia" : title,
+                message: message.isEmpty ? "Server neposlal platný výsledok." : message
+            )
+            return true
+        }
+
+        requestTimeoutWorkItem?.cancel()
+        requestTimeoutWorkItem = nil
+        activeRequestID = UUID()
+        pendingURL = nil
+
+        NFCNativeModal.shared.showResult(
+            state: state,
+            title: title,
+            message: message,
+            seconds: seconds
+        )
+        print("[TF NFC 9.21] Server confirmed state=\(state), title=\(title)")
+        return true
+    }
+
+    private static func armGlobalTimeout(for requestID: UUID) {
+        let item = DispatchWorkItem {
+            guard requestID == activeRequestID else { return }
+            fail(
+                requestID: requestID,
+                title: "NFC bez potvrdenia",
+                message: "Spracovanie trvalo príliš dlho. Prilož tag ešte raz."
+            )
+        }
+        requestTimeoutWorkItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12.0, execute: item)
+    }
+
+    private static func fail(requestID: UUID, title: String, message: String) {
+        guard requestID == activeRequestID else { return }
+        requestTimeoutWorkItem?.cancel()
+        webViewRetryWorkItem?.cancel()
+        requestTimeoutWorkItem = nil
+        webViewRetryWorkItem = nil
+        pendingURL = nil
+        activeRequestID = UUID()
+        NFCNativeModal.shared.showResult(state: "error", title: title, message: message, seconds: 4)
+        print("[TF NFC 9.21] Failure: \(title) – \(message)")
+    }
+
+    private static func locateWebView() -> WKWebView? {
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+              let window = appDelegate.window else {
+            return nil
+        }
+        return findWebView(in: window)
     }
 
     private static func findWebView(in view: UIView) -> WKWebView? {
@@ -245,147 +371,306 @@ enum NFCDeepLinkRouter {
     }
 }
 
-final class NFCNativeOverlay {
-    enum State {
-        case loading
-        case success
-        case error
-    }
+final class NFCNativeModal {
+    static let shared = NFCNativeModal()
 
-    static let shared = NFCNativeOverlay()
-
-    private weak var overlayView: UIVisualEffectView?
+    private weak var backdrop: UIVisualEffectView?
+    private weak var card: UIView?
+    private weak var iconView: UIImageView?
+    private weak var spinner: UIActivityIndicatorView?
+    private weak var kickerLabel: UILabel?
     private weak var titleLabel: UILabel?
     private weak var messageLabel: UILabel?
-    private weak var symbolView: UIImageView?
+    private weak var countdownLabel: UILabel?
+    private weak var countdownCaption: UILabel?
+
+    private var countdownTimer: Timer?
     private var dismissWorkItem: DispatchWorkItem?
+    private var accent = UIColor.white
 
     private init() {}
 
-    func show(title: String, message: String, state: State) {
+    func setTheme(_ rawTheme: String) {
+        let theme = rawTheme.lowercased()
+        if theme == "editorial" || theme == "pink" || theme == "rose" {
+            accent = UIColor(red: 1.0, green: 0.31, blue: 0.58, alpha: 1.0)
+        } else {
+            accent = UIColor(red: 0.78, green: 1.0, blue: 0.0, alpha: 1.0)
+        }
+        applyAccent()
+    }
+
+    func showLoading() {
         DispatchQueue.main.async {
             self.dismissWorkItem?.cancel()
-            self.dismissWorkItem = nil
+            self.countdownTimer?.invalidate()
+            self.countdownTimer = nil
 
-            let overlay: UIVisualEffectView
-            if let existing = self.overlayView {
-                overlay = existing
-            } else {
-                guard let created = self.makeOverlay() else { return }
-                overlay = created
-            }
+            guard self.ensureModal() else { return }
+            self.kickerLabel?.text = "NFC • TURANSKÉ FITKO"
+            self.titleLabel?.text = "Spracúvam NFC…"
+            self.messageLabel?.text = "Overujem tvoj vstup so serverom."
+            self.iconView?.image = UIImage(systemName: "wave.3.right.circle.fill")
+            self.iconView?.isHidden = false
+            self.countdownLabel?.isHidden = true
+            self.countdownCaption?.isHidden = true
+            self.spinner?.isHidden = false
+            self.spinner?.startAnimating()
+            self.presentIfNeeded()
+        }
+    }
 
+    func showResult(state: String, title: String, message: String, seconds: Int) {
+        DispatchQueue.main.async {
+            self.dismissWorkItem?.cancel()
+            self.countdownTimer?.invalidate()
+            self.countdownTimer = nil
+
+            guard self.ensureModal() else { return }
+            self.spinner?.stopAnimating()
+            self.spinner?.isHidden = true
+            self.countdownLabel?.isHidden = false
+            self.countdownCaption?.isHidden = false
+            self.kickerLabel?.text = "NFC • TURANSKÉ FITKO"
             self.titleLabel?.text = title
             self.messageLabel?.text = message
 
-            let symbolName: String
-            switch state {
-            case .loading: symbolName = "wave.3.right.circle.fill"
-            case .success: symbolName = "checkmark.circle.fill"
-            case .error: symbolName = "exclamationmark.circle.fill"
+            let normalized = state.lowercased()
+            if normalized == "error" || normalized == "login" {
+                self.iconView?.image = UIImage(systemName: "exclamationmark.circle.fill")
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+            } else if normalized == "info" || normalized == "duplicate" {
+                self.iconView?.image = UIImage(systemName: "checkmark.shield.fill")
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+            } else {
+                self.iconView?.image = UIImage(systemName: "checkmark.circle.fill")
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
             }
-            self.symbolView?.image = UIImage(systemName: symbolName)
+            self.iconView?.isHidden = false
 
-            if overlay.alpha < 1 {
-                overlay.alpha = 0
-                UIView.animate(withDuration: 0.16) {
-                    overlay.alpha = 1
-                }
+            self.presentIfNeeded()
+            self.startCountdown(seconds: seconds)
+        }
+    }
+
+    private func startCountdown(seconds: Int) {
+        var remaining = max(1, seconds)
+        countdownLabel?.text = String(remaining)
+        countdownCaption?.text = "Návrat do appky"
+
+        countdownTimer?.invalidate()
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] timer in
+            guard let self = self else {
+                timer.invalidate()
+                return
+            }
+            remaining -= 1
+            if remaining <= 0 {
+                timer.invalidate()
+                self.countdownTimer = nil
+                self.dismiss()
+            } else {
+                self.countdownLabel?.text = String(remaining)
             }
         }
     }
 
-    func dismiss(after delay: TimeInterval = 0) {
-        DispatchQueue.main.async {
-            self.dismissWorkItem?.cancel()
-            let item = DispatchWorkItem { [weak self] in
-                guard let self = self, let overlay = self.overlayView else { return }
-                UIView.animate(withDuration: 0.18, animations: {
-                    overlay.alpha = 0
-                }, completion: { _ in
-                    overlay.removeFromSuperview()
-                })
-            }
-            self.dismissWorkItem = item
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: item)
-        }
-    }
+    private func ensureModal() -> Bool {
+        if backdrop != nil, card != nil { return true }
+        guard let window = activeWindow() else { return false }
 
-    private func makeOverlay() -> UIVisualEffectView? {
-        guard let window = activeWindow() else { return nil }
+        let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemUltraThinMaterialDark))
+        blur.translatesAutoresizingMaskIntoConstraints = false
+        blur.alpha = 0
+        blur.isUserInteractionEnabled = true
 
-        let blur = UIBlurEffect(style: .systemUltraThinMaterialDark)
-        let overlay = UIVisualEffectView(effect: blur)
-        overlay.translatesAutoresizingMaskIntoConstraints = false
-        overlay.layer.cornerRadius = 24
-        overlay.layer.cornerCurve = .continuous
-        overlay.clipsToBounds = true
-        overlay.layer.borderWidth = 1
-        overlay.layer.borderColor = UIColor.white.withAlphaComponent(0.16).cgColor
-        overlay.isUserInteractionEnabled = false
+        let dim = UIView()
+        dim.translatesAutoresizingMaskIntoConstraints = false
+        dim.backgroundColor = UIColor.black.withAlphaComponent(0.42)
+        blur.contentView.addSubview(dim)
 
-        let symbol = UIImageView()
-        symbol.translatesAutoresizingMaskIntoConstraints = false
-        symbol.contentMode = .scaleAspectFit
-        symbol.tintColor = .white
+        let card = UIView()
+        card.translatesAutoresizingMaskIntoConstraints = false
+        card.backgroundColor = UIColor(red: 0.055, green: 0.045, blue: 0.052, alpha: 0.96)
+        card.layer.cornerRadius = 30
+        card.layer.cornerCurve = .continuous
+        card.layer.borderWidth = 1
+        card.layer.borderColor = UIColor.white.withAlphaComponent(0.12).cgColor
+        card.layer.shadowColor = UIColor.black.cgColor
+        card.layer.shadowOpacity = 0.45
+        card.layer.shadowRadius = 34
+        card.layer.shadowOffset = CGSize(width: 0, height: 18)
+
+        let icon = UIImageView()
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        icon.contentMode = .scaleAspectFit
+
+        let spinner = UIActivityIndicatorView(style: .medium)
+        spinner.translatesAutoresizingMaskIntoConstraints = false
+        spinner.color = .white
+
+        let kicker = UILabel()
+        kicker.translatesAutoresizingMaskIntoConstraints = false
+        kicker.textAlignment = .center
+        kicker.font = .systemFont(ofSize: 10, weight: .heavy)
+        kicker.textColor = UIColor.white.withAlphaComponent(0.58)
+        kicker.numberOfLines = 1
 
         let title = UILabel()
         title.translatesAutoresizingMaskIntoConstraints = false
+        title.textAlignment = .center
+        title.font = .systemFont(ofSize: 28, weight: .black)
         title.textColor = .white
-        title.font = .systemFont(ofSize: 18, weight: .bold)
-        title.numberOfLines = 2
+        title.numberOfLines = 3
+        title.adjustsFontSizeToFitWidth = true
+        title.minimumScaleFactor = 0.76
 
         let message = UILabel()
         message.translatesAutoresizingMaskIntoConstraints = false
-        message.textColor = UIColor.white.withAlphaComponent(0.68)
-        message.font = .systemFont(ofSize: 12, weight: .semibold)
-        message.numberOfLines = 2
+        message.textAlignment = .center
+        message.font = .systemFont(ofSize: 14, weight: .medium)
+        message.textColor = UIColor.white.withAlphaComponent(0.67)
+        message.numberOfLines = 5
 
-        let textStack = UIStackView(arrangedSubviews: [title, message])
-        textStack.translatesAutoresizingMaskIntoConstraints = false
-        textStack.axis = .vertical
-        textStack.spacing = 3
+        let countdown = UILabel()
+        countdown.translatesAutoresizingMaskIntoConstraints = false
+        countdown.textAlignment = .center
+        countdown.font = .monospacedDigitSystemFont(ofSize: 28, weight: .black)
+        countdown.textColor = .white
+        countdown.backgroundColor = UIColor.white.withAlphaComponent(0.06)
+        countdown.layer.cornerRadius = 28
+        countdown.layer.cornerCurve = .continuous
+        countdown.clipsToBounds = true
 
-        let row = UIStackView(arrangedSubviews: [symbol, textStack])
-        row.translatesAutoresizingMaskIntoConstraints = false
-        row.axis = .horizontal
-        row.alignment = .center
-        row.spacing = 12
+        let countdownCaption = UILabel()
+        countdownCaption.translatesAutoresizingMaskIntoConstraints = false
+        countdownCaption.textAlignment = .center
+        countdownCaption.font = .systemFont(ofSize: 10, weight: .bold)
+        countdownCaption.textColor = UIColor.white.withAlphaComponent(0.48)
+        countdownCaption.text = "Návrat do appky"
 
-        overlay.contentView.addSubview(row)
-        window.addSubview(overlay)
+        card.addSubview(icon)
+        card.addSubview(spinner)
+        card.addSubview(kicker)
+        card.addSubview(title)
+        card.addSubview(message)
+        card.addSubview(countdown)
+        card.addSubview(countdownCaption)
+        blur.contentView.addSubview(card)
+        window.addSubview(blur)
 
         NSLayoutConstraint.activate([
-            overlay.leadingAnchor.constraint(equalTo: window.leadingAnchor, constant: 18),
-            overlay.trailingAnchor.constraint(equalTo: window.trailingAnchor, constant: -18),
-            overlay.topAnchor.constraint(equalTo: window.safeAreaLayoutGuide.topAnchor, constant: 14),
-            overlay.heightAnchor.constraint(greaterThanOrEqualToConstant: 78),
+            blur.leadingAnchor.constraint(equalTo: window.leadingAnchor),
+            blur.trailingAnchor.constraint(equalTo: window.trailingAnchor),
+            blur.topAnchor.constraint(equalTo: window.topAnchor),
+            blur.bottomAnchor.constraint(equalTo: window.bottomAnchor),
 
-            row.leadingAnchor.constraint(equalTo: overlay.contentView.leadingAnchor, constant: 16),
-            row.trailingAnchor.constraint(equalTo: overlay.contentView.trailingAnchor, constant: -16),
-            row.topAnchor.constraint(equalTo: overlay.contentView.topAnchor, constant: 13),
-            row.bottomAnchor.constraint(equalTo: overlay.contentView.bottomAnchor, constant: -13),
+            dim.leadingAnchor.constraint(equalTo: blur.contentView.leadingAnchor),
+            dim.trailingAnchor.constraint(equalTo: blur.contentView.trailingAnchor),
+            dim.topAnchor.constraint(equalTo: blur.contentView.topAnchor),
+            dim.bottomAnchor.constraint(equalTo: blur.contentView.bottomAnchor),
 
-            symbol.widthAnchor.constraint(equalToConstant: 38),
-            symbol.heightAnchor.constraint(equalToConstant: 38),
+            card.leadingAnchor.constraint(greaterThanOrEqualTo: blur.contentView.leadingAnchor, constant: 22),
+            card.trailingAnchor.constraint(lessThanOrEqualTo: blur.contentView.trailingAnchor, constant: -22),
+            card.centerXAnchor.constraint(equalTo: blur.contentView.centerXAnchor),
+            card.centerYAnchor.constraint(equalTo: blur.contentView.centerYAnchor),
+            card.widthAnchor.constraint(lessThanOrEqualToConstant: 390),
+
+            icon.topAnchor.constraint(equalTo: card.topAnchor, constant: 24),
+            icon.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 64),
+            icon.heightAnchor.constraint(equalToConstant: 64),
+
+            spinner.centerXAnchor.constraint(equalTo: icon.centerXAnchor),
+            spinner.centerYAnchor.constraint(equalTo: icon.centerYAnchor),
+
+            kicker.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 14),
+            kicker.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
+            kicker.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
+
+            title.topAnchor.constraint(equalTo: kicker.bottomAnchor, constant: 8),
+            title.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 20),
+            title.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -20),
+
+            message.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 9),
+            message.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
+            message.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
+
+            countdown.topAnchor.constraint(equalTo: message.bottomAnchor, constant: 20),
+            countdown.centerXAnchor.constraint(equalTo: card.centerXAnchor),
+            countdown.widthAnchor.constraint(equalToConstant: 56),
+            countdown.heightAnchor.constraint(equalToConstant: 56),
+
+            countdownCaption.topAnchor.constraint(equalTo: countdown.bottomAnchor, constant: 7),
+            countdownCaption.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
+            countdownCaption.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
+            countdownCaption.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -22)
         ])
 
-        overlay.alpha = 0
-        overlayView = overlay
-        titleLabel = title
-        messageLabel = message
-        symbolView = symbol
-        return overlay
+        self.backdrop = blur
+        self.card = card
+        self.iconView = icon
+        self.spinner = spinner
+        self.kickerLabel = kicker
+        self.titleLabel = title
+        self.messageLabel = message
+        self.countdownLabel = countdown
+        self.countdownCaption = countdownCaption
+        applyAccent()
+        return true
+    }
+
+    private func applyAccent() {
+        DispatchQueue.main.async {
+            self.iconView?.tintColor = self.accent
+            self.kickerLabel?.textColor = self.accent.withAlphaComponent(0.90)
+            self.card?.layer.borderColor = self.accent.withAlphaComponent(0.35).cgColor
+            self.countdownLabel?.layer.borderWidth = 1
+            self.countdownLabel?.layer.borderColor = self.accent.withAlphaComponent(0.34).cgColor
+            self.countdownLabel?.textColor = self.accent
+        }
+    }
+
+    private func presentIfNeeded() {
+        guard let backdrop = backdrop else { return }
+        if backdrop.superview == nil, let window = activeWindow() {
+            window.addSubview(backdrop)
+        }
+        if backdrop.alpha < 1 {
+            backdrop.transform = CGAffineTransform(scaleX: 1.015, y: 1.015)
+            UIView.animate(withDuration: 0.18) {
+                backdrop.alpha = 1
+                backdrop.transform = .identity
+            }
+        }
+    }
+
+    private func dismiss() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        guard let backdrop = backdrop else { return }
+        UIView.animate(withDuration: 0.20, animations: {
+            backdrop.alpha = 0
+            backdrop.transform = CGAffineTransform(scaleX: 0.985, y: 0.985)
+        }, completion: { [weak self] _ in
+            backdrop.removeFromSuperview()
+            self?.backdrop = nil
+            self?.card = nil
+            self?.iconView = nil
+            self?.spinner = nil
+            self?.kickerLabel = nil
+            self?.titleLabel = nil
+            self?.messageLabel = nil
+            self?.countdownLabel = nil
+            self?.countdownCaption = nil
+        })
     }
 
     private func activeWindow() -> UIWindow? {
-        let scenes = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .filter { $0.activationState == .foregroundActive || $0.activationState == .foregroundInactive }
-        for scene in scenes {
-            if let key = scene.windows.first(where: { $0.isKeyWindow }) { return key }
-            if let first = scene.windows.first { return first }
+        if let appDelegate = UIApplication.shared.delegate as? AppDelegate,
+           let window = appDelegate.window {
+            return window
         }
-        return nil
+        return UIApplication.shared.windows.first(where: { $0.isKeyWindow })
     }
 }
