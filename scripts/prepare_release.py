@@ -18,7 +18,7 @@ def replace_exactly_once(text: str, pattern: str, replacement: str, label: str) 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--web-version", default="6.44")
+    parser.add_argument("--web-version", default="9.19")
     parser.add_argument("--marketing-version", default="1.0")
     args = parser.parse_args()
 
