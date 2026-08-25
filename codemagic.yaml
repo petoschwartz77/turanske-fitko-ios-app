@@ -12,12 +12,14 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "6.58" \
+            --web-version "9.19" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.19" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "<string>applinks:turanskefitko.sk</string>" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Show project files
         script: |
@@ -58,12 +60,14 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "6.58" \
+            --web-version "9.19" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.19" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "<string>applinks:turanskefitko.sk</string>" \
+            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Resolve Swift packages
@@ -85,7 +89,7 @@ workflows:
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
             --scheme "TuranskeFitkoApp"
-      - name: Validate signed IPA metadata
+      - name: Validate signed IPA metadata and NFC entitlement
         script: |
           IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
           test -n "$IPA_PATH"
@@ -111,12 +115,17 @@ workflows:
           test "$NON_EXEMPT_ENCRYPTION" = "false"
           test -f "$APP_PATH/Assets.car"
 
+          ENTITLEMENTS_PATH="$VALIDATION_DIR/signed-entitlements.plist"
+          codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null
+          grep -Fq "applinks:turanskefitko.sk" "$ENTITLEMENTS_PATH"
+
           echo "Validated executable: $EXECUTABLE_NAME"
           echo "Validated display name: $DISPLAY_NAME"
           echo "Validated app version: $APP_VERSION"
           echo "Validated bundle identifier: $BUNDLE_ID"
           echo "Validated non-exempt encryption: $NON_EXEMPT_ENCRYPTION"
           echo "Validated icon asset: $ICON_NAME"
+          echo "Validated Universal Link entitlement: applinks:turanskefitko.sk"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
