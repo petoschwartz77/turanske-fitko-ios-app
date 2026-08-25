@@ -12,9 +12,9 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.22" \
+            --web-version "9.23" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.22" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.23" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
@@ -70,9 +70,9 @@ workflows:
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.22" \
+            --web-version "9.23" \
             --marketing-version "1.0"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.22" \
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.23" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
@@ -149,7 +149,7 @@ workflows:
           echo "Validated custom NFC scheme: $URL_SCHEME"
           echo "Validated icon asset: $ICON_NAME"
           echo "Validated Universal Link entitlement: applinks:turanskefitko.sk"
-          echo "Validated NFC flow: server gateway + non-blocking status rail v9.22"
+          echo "Validated NFC flow: server gateway + non-blocking status rail v9.23"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
