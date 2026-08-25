@@ -2,14 +2,14 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'sk.turanskefitko.manager'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         applicationId 'sk.turanskefitko.manager'
         minSdk 23
-        targetSdk 35
-        versionCode 3
-        versionName '2.1'
+        targetSdk 36
+        versionCode 4
+        versionName '2.2'
     }
 
     signingConfigs {
