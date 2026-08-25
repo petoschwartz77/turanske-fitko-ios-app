@@ -267,8 +267,13 @@ final class NFCNativeOverlay {
             self.dismissWorkItem?.cancel()
             self.dismissWorkItem = nil
 
-            let overlay = self.overlayView ?? self.makeOverlay()
-            guard let overlay else { return }
+            let overlay: UIVisualEffectView
+            if let existing = self.overlayView {
+                overlay = existing
+            } else {
+                guard let created = self.makeOverlay() else { return }
+                overlay = created
+            }
 
             self.titleLabel?.text = title
             self.messageLabel?.text = message
@@ -294,7 +299,7 @@ final class NFCNativeOverlay {
         DispatchQueue.main.async {
             self.dismissWorkItem?.cancel()
             let item = DispatchWorkItem { [weak self] in
-                guard let self, let overlay = self.overlayView else { return }
+                guard let self = self, let overlay = self.overlayView else { return }
                 UIView.animate(withDuration: 0.18, animations: {
                     overlay.alpha = 0
                 }, completion: { _ in
