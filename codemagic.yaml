@@ -134,6 +134,20 @@ workflows:
       android_signing:
         - turanske_fitko_upload
     scripts:
+      - name: Ensure Android 16 SDK (API 36)
+        script: |
+          set -e
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if command -v sdkmanager >/dev/null 2>&1; then
+            SDKMANAGER="$(command -v sdkmanager)"
+          elif [ -n "$SDK_ROOT" ] && [ -x "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          else
+            echo "sdkmanager not found"
+            exit 1
+          fi
+          yes | "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" >/dev/null
+          echo "Android 16 SDK ready"
       - name: Verify Android App Links release configuration
         script: |
           set -e
@@ -141,7 +155,10 @@ workflows:
           test -f "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           test -f "$CM_BUILD_DIR/android/app/src/main/res/drawable/ic_launcher.webp"
           grep -Fq "applicationId 'sk.turanskefitko.manager'" "$CM_BUILD_DIR/android/app/build.gradle"
-          grep -Fq "versionCode 3" "$CM_BUILD_DIR/android/app/build.gradle"
+          grep -Fq "compileSdk 36" "$CM_BUILD_DIR/android/app/build.gradle"
+          grep -Fq "targetSdk 36" "$CM_BUILD_DIR/android/app/build.gradle"
+          grep -Fq "versionCode 4" "$CM_BUILD_DIR/android/app/build.gradle"
+          grep -Fq "versionName '2.2'" "$CM_BUILD_DIR/android/app/build.gradle"
           grep -Fq 'android:autoVerify="true"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           grep -Fq 'android:host="turanskefitko.sk"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           grep -Fq 'android:pathPrefix="/tfm-app/"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
