@@ -9,11 +9,12 @@ workflows:
       - name: Generate branded app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
+          python3 "$CM_BUILD_DIR/scripts/ensure_ipad_icons.py"
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
             --web-version "9.23" \
-            --marketing-version "1.0"
+            --marketing-version "1.2"
           grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.23" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
@@ -30,6 +31,8 @@ workflows:
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' \
             "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist" | grep -Fxq "turanskefitko"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-167.png"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Show project files
         script: |
@@ -67,11 +70,12 @@ workflows:
       - name: Generate branded app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
+          python3 "$CM_BUILD_DIR/scripts/ensure_ipad_icons.py"
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
             --web-version "9.23" \
-            --marketing-version "1.0"
+            --marketing-version "1.2"
           grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.23" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
@@ -88,6 +92,8 @@ workflows:
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' \
             "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist" | grep -Fxq "turanskefitko"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-167.png"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Resolve Swift packages
@@ -131,7 +137,7 @@ workflows:
           test -x "$APP_PATH/$EXECUTABLE_NAME"
           test "$ICON_NAME" = "AppIcon"
           test "$DISPLAY_NAME" = "Turanské Fitko App"
-          test "$APP_VERSION" = "1.0"
+          test "$APP_VERSION" = "1.2"
           test "$BUNDLE_ID" = "sk.turanskefitko.app"
           test "$NON_EXEMPT_ENCRYPTION" = "false"
           test "$URL_SCHEME" = "turanskefitko"
