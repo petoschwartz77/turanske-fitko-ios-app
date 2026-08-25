@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the native iOS wrapper for Turanské Fitko App v9.22."""
+"""Prepare the native iOS wrapper for Turanské Fitko App v9.23."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def replace_exactly_once(text: str, pattern: str, replacement: str, label: str) 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--web-version", default="9.22")
+    parser.add_argument("--web-version", default="9.23")
     parser.add_argument("--marketing-version", default="1.0")
     args = parser.parse_args()
 
@@ -53,9 +53,23 @@ def main() -> None:
 
     swift = app_delegate.read_text(encoding="utf-8")
 
-    # v9.22 – stop depending on Universal Link delivery for NFC. The existing physical tag
-    # now reaches WordPress first. WordPress creates a one-use ticket and opens the app through
-    # turanskefitko://nfc?ticket=..., which arrives through application(_:open:options:) reliably.
+    # Xcode 26 exposes the completion-handler overload with the second argument label `in:`.
+    # The previous source used the async overload label (`contentWorld:`) together with a
+    # trailing closure, which fails with "extra trailing closure passed in call".
+    old_call = '''            webView.callAsyncJavaScript(\n                script,\n                arguments: ["nfcURL": targetURL.absoluteString],\n                in: nil,\n                contentWorld: .page\n            ) { result in'''
+    new_call = '''            webView.callAsyncJavaScript(\n                script,\n                arguments: ["nfcURL": targetURL.absoluteString],\n                in: nil,\n                in: .page,\n                completionHandler: { result in'''
+    if old_call in swift:
+        swift = swift.replace(old_call, new_call, 1)
+        call_pos = swift.index('            webView.callAsyncJavaScript(')
+        old_close = '            }\n        } else {'
+        close_pos = swift.index(old_close, call_pos)
+        swift = swift[:close_pos] + '            })\n        } else {' + swift[close_pos + len(old_close):]
+    elif 'completionHandler: { result in' not in swift:
+        raise RuntimeError("Could not patch WKWebView callAsyncJavaScript for Xcode 26.")
+
+    # The physical NFC tag reaches WordPress first. WordPress stores a short-lived one-use
+    # ticket and launches the app through turanskefitko://nfc?ticket=.... This means the scan
+    # survives even when iOS Universal Link delivery is inconsistent.
     scheme_anchor = '        guard incomingURL.scheme?.lowercased() == "https" else { return nil }\n'
     scheme_block = '''        let incomingScheme = incomingURL.scheme?.lowercased() ?? ""\n        if incomingScheme == "turanskefitko" {\n            guard (incomingURL.host ?? "").lowercased() == "nfc",\n                  let components = URLComponents(url: incomingURL, resolvingAgainstBaseURL: false),\n                  let rawTicket = components.queryItems?.first(where: { $0.name == "ticket" })?.value else {\n                return nil\n            }\n            let ticket = rawTicket.lowercased()\n            let hex = CharacterSet(charactersIn: "0123456789abcdef")\n            guard (32...128).contains(ticket.count),\n                  ticket.unicodeScalars.allSatisfy({ hex.contains($0) }) else {\n                return nil\n            }\n            guard var claim = URLComponents(string: "https://turanskefitko.sk/tfm-app/nfc/claim/\\(ticket)/") else {\n                return nil\n            }\n            claim.queryItems = [\n                URLQueryItem(name: "tfma_nfc_app", value: "1"),\n                URLQueryItem(name: "tfma_native_handoff", value: "1"),\n                URLQueryItem(name: "tfma_native_json", value: "1"),\n                URLQueryItem(name: "native", value: "ios"),\n                URLQueryItem(name: "tfma_nocache", value: String(Int(Date().timeIntervalSince1970 * 1000)))\n            ]\n            return claim.url\n        }\n        guard incomingScheme == "https" else { return nil }\n'''
     if 'incomingScheme == "turanskefitko"' not in swift:
@@ -63,8 +77,8 @@ def main() -> None:
             raise RuntimeError("Could not inject custom NFC scheme handler.")
         swift = swift.replace(scheme_anchor, scheme_block, 1)
 
-    # Replace the blocking full-screen modal with a compact status rail. It is attached to the
-    # AppDelegate-owned UIWindow and never navigates or blocks the Home screen.
+    # Compact non-blocking NFC receipt rail. It gives immediate feedback without covering Home.
+    # No AudioToolbox dependency: haptics are enough and avoid SDK/import compatibility issues.
     rail_class = r'''final class NFCNativeModal {
     static let shared = NFCNativeModal()
 
@@ -98,8 +112,11 @@ def main() -> None:
             self.titleLabel?.text = "NFC načítané"
             self.messageLabel?.text = "Overujem vstup so serverom…"
             self.iconView?.image = UIImage(systemName: "wave.3.right.circle.fill")
-            self.progressView?.progress = 0.16
+            self.iconView?.tintColor = self.accent
+            self.progressView?.progressTintColor = self.accent
+            self.progressView?.progress = 0.18
             self.present()
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
         }
     }
 
@@ -109,33 +126,34 @@ def main() -> None:
             guard self.ensureRail() else { return }
 
             let normalized = state.lowercased()
+            let isError = normalized == "error" || normalized == "login"
+            let resultAccent = isError
+                ? UIColor(red: 1.0, green: 0.64, blue: 0.32, alpha: 1.0)
+                : self.accent
+
             self.kickerLabel?.text = "NFC • TURANSKÉ FITKO"
             self.titleLabel?.text = title
             self.messageLabel?.text = message
-            self.iconView?.image = UIImage(systemName: normalized == "error" ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-            self.iconView?.tintColor = normalized == "error" ? UIColor(red: 1.0, green: 0.64, blue: 0.32, alpha: 1.0) : self.accent
-            self.progressView?.progressTintColor = normalized == "error" ? UIColor(red: 1.0, green: 0.64, blue: 0.32, alpha: 1.0) : self.accent
+            self.iconView?.image = UIImage(systemName: isError ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+            self.iconView?.tintColor = resultAccent
+            self.progressView?.progressTintColor = resultAccent
             self.progressView?.progress = 1.0
             self.present()
 
-            let generator = UINotificationFeedbackGenerator()
-            generator.prepare()
-            if normalized == "error" {
-                generator.notificationOccurred(.error)
-            } else {
-                generator.notificationOccurred(.success)
-                AudioServicesPlaySystemSound(1104)
-            }
+            let feedback = UINotificationFeedbackGenerator()
+            feedback.prepare()
+            feedback.notificationOccurred(isError ? .error : .success)
 
             let duration = max(3, min(9, seconds))
             let started = Date().timeIntervalSince1970
             self.progressTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] timer in
-                guard let self else { timer.invalidate(); return }
+                guard let self = self else { timer.invalidate(); return }
                 let elapsed = Date().timeIntervalSince1970 - started
                 let remaining = max(0, 1 - Float(elapsed / Double(duration)))
                 self.progressView?.setProgress(remaining, animated: false)
                 if remaining <= 0 { timer.invalidate() }
             }
+
             let item = DispatchWorkItem { [weak self] in self?.hide() }
             self.dismissWorkItem = item
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(duration), execute: item)
@@ -240,7 +258,7 @@ def main() -> None:
     }
 
     private func present() {
-        guard let rail else { return }
+        guard let rail = rail else { return }
         if rail.superview == nil,
            let appDelegate = UIApplication.shared.delegate as? AppDelegate,
            let window = appDelegate.window {
@@ -253,7 +271,7 @@ def main() -> None:
     }
 
     private func hide() {
-        guard let rail else { return }
+        guard let rail = rail else { return }
         UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseIn, .beginFromCurrentState]) {
             rail.alpha = 0
             rail.transform = CGAffineTransform(translationX: 0, y: -110)
@@ -268,6 +286,7 @@ def main() -> None:
     }
 }
 '''
+
     swift, class_count = re.subn(r'final class NFCNativeModal \{.*\Z', rail_class, swift, count=1, flags=re.S)
     if class_count != 1:
         raise RuntimeError(f"Could not replace NFCNativeModal; found {class_count} matches.")
@@ -276,6 +295,9 @@ def main() -> None:
         raise RuntimeError("Custom NFC scheme injection validation failed.")
     if 'NFC načítané' not in swift or 'translationX: 0, y: -110' not in swift:
         raise RuntimeError("NFC receipt rail validation failed.")
+    if 'completionHandler: { result in' not in swift or 'in: .page' not in swift:
+        raise RuntimeError("Xcode 26 WebKit compatibility validation failed.")
+
     app_delegate.write_text(swift, encoding="utf-8")
 
     with info_plist.open("rb") as handle:
@@ -301,6 +323,7 @@ def main() -> None:
     print(f"Prepared production URL: {production_url}")
     print("Prepared NFC transport: server gateway -> turanskefitko:// one-use ticket")
     print("Prepared NFC feedback: non-blocking top receipt rail")
+    print("Prepared Xcode 26 WebKit compatibility")
     print(f"Prepared display name: {plist['CFBundleDisplayName']}")
     print(f"Prepared marketing version: {plist['CFBundleShortVersionString']}")
 
