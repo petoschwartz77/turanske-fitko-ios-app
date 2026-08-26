@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Generate the iOS AppIcon set from the original approved Turanské Fitko v6.99 icon.
+"""Generate Turanské Fitko primary + Ružová iskra iOS app icon sets.
 
-This is intentionally a recovery-only packaging script. It does not change app behavior.
+The two 1024px sources already ship with the WordPress app plugin. The build verifies exact
+SHA-256 hashes so a wrong or stale icon can never silently reach TestFlight.
 """
 
 from __future__ import annotations
@@ -13,54 +14,67 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-ICONSET = ROOT / "TuranskeFitkoApp" / "Assets.xcassets" / "AppIcon.appiconset"
-SOURCE = ICONSET / "AppIcon-original-v699.png"
+ASSETS = ROOT / "TuranskeFitkoApp" / "Assets.xcassets"
 
-SOURCE_URL = (
+PRIMARY_SET = ASSETS / "AppIcon.appiconset"
+PINK_SET = ASSETS / "AppIconPink.appiconset"
+
+BASE_URL = (
     "https://turanskefitko.sk/wp-content/plugins/"
-    "turanske-fitko-manager-mobile-app-mode/assets/app-icon/"
-    "turanske-fitko-app-icon-1024.png"
+    "turanske-fitko-manager-mobile-app-mode/assets/native-icon/"
 )
-SOURCE_SHA256 = "fe78336b9275c1767a8358a15f68fe108de0fbb72f7db94a15dbe004a94bdd69"
+SOURCES = {
+    "primary": {
+        "url": BASE_URL + "primary-1024.jpg",
+        "sha256": "fa7ac64da038befa7d59d9748cfca19879701e72b3c42f179205038cf0b3e84a",
+        "set": PRIMARY_SET,
+        "prefix": "AppIcon",
+    },
+    "pink": {
+        "url": BASE_URL + "pink-1024.jpg",
+        "sha256": "853b5499ccf67877aac6207e097d6fb7eab686e52c15d99231acd52d77b58f62",
+        "set": PINK_SET,
+        "prefix": "AppIconPink",
+    },
+}
 
 ICON_SPECS = [
-    # iPhone
-    ("AppIcon-120.png", 120, "iphone", "60x60", "2x"),
-    ("AppIcon-180.png", 180, "iphone", "60x60", "3x"),
-    # iPad - kept only because the already approved App Store record requires it.
-    ("AppIcon-iPad-20.png", 20, "ipad", "20x20", "1x"),
-    ("AppIcon-iPad-40.png", 40, "ipad", "20x20", "2x"),
-    ("AppIcon-iPad-29.png", 29, "ipad", "29x29", "1x"),
-    ("AppIcon-iPad-58.png", 58, "ipad", "29x29", "2x"),
-    ("AppIcon-iPad-40pt.png", 40, "ipad", "40x40", "1x"),
-    ("AppIcon-iPad-80.png", 80, "ipad", "40x40", "2x"),
-    ("AppIcon-iPad-76.png", 76, "ipad", "76x76", "1x"),
-    ("AppIcon-iPad-152.png", 152, "ipad", "76x76", "2x"),
-    ("AppIcon-iPad-167.png", 167, "ipad", "83.5x83.5", "2x"),
+    (120, "iphone", "60x60", "2x"),
+    (180, "iphone", "60x60", "3x"),
+    (20, "ipad", "20x20", "1x"),
+    (40, "ipad", "20x20", "2x"),
+    (29, "ipad", "29x29", "1x"),
+    (58, "ipad", "29x29", "2x"),
+    (40, "ipad", "40x40", "1x"),
+    (80, "ipad", "40x40", "2x"),
+    (76, "ipad", "76x76", "1x"),
+    (152, "ipad", "76x76", "2x"),
+    (167, "ipad", "83.5x83.5", "2x"),
 ]
 
 
-def download_source() -> None:
-    ICONSET.mkdir(parents=True, exist_ok=True)
+def download(url: str, expected_sha: str, destination: Path) -> None:
     request = urllib.request.Request(
-        SOURCE_URL,
-        headers={"User-Agent": "TuranskeFitko-Recovery-Builder/1.2"},
+        url,
+        headers={"User-Agent": "TuranskeFitko-iOS-Builder/9.26"},
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = response.read()
 
     digest = hashlib.sha256(payload).hexdigest()
-    if digest != SOURCE_SHA256:
+    if digest != expected_sha:
         raise RuntimeError(
-            "The original approved v6.99 app icon changed or is unavailable. "
-            f"Expected sha256 {SOURCE_SHA256}, got {digest}."
+            f"Icon checksum mismatch for {destination.name}. "
+            f"Expected {expected_sha}, got {digest}."
         )
-    SOURCE.write_bytes(payload)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_bytes(payload)
+    print(f"Verified {destination.name}: {digest}")
 
 
-def resize(output: Path, pixels: int) -> None:
+def resize(source: Path, output: Path, pixels: int) -> None:
     subprocess.run(
-        ["sips", "-z", str(pixels), str(pixels), str(SOURCE), "--out", str(output)],
+        ["sips", "-s", "format", "png", "-z", str(pixels), str(pixels), str(source), "--out", str(output)],
         check=True,
         stdout=subprocess.DEVNULL,
     )
@@ -68,45 +82,52 @@ def resize(output: Path, pixels: int) -> None:
         raise RuntimeError(f"Failed to generate {output.name}")
 
 
-def main() -> None:
-    download_source()
+def build_icon_set(name: str, spec: dict) -> None:
+    iconset: Path = spec["set"]
+    prefix: str = spec["prefix"]
+    iconset.mkdir(parents=True, exist_ok=True)
 
-    marketing = ICONSET / "AppIcon-1024.png"
-    resize(marketing, 1024)
+    source = iconset / f"{prefix}-source.jpg"
+    download(spec["url"], spec["sha256"], source)
 
     images = []
-    for filename, pixels, idiom, size, scale in ICON_SPECS:
-        output = ICONSET / filename
-        resize(output, pixels)
-        images.append(
-            {
-                "filename": filename,
-                "idiom": idiom,
-                "size": size,
-                "scale": scale,
-            }
-        )
+    used_names = set()
+    for pixels, idiom, size, scale in ICON_SPECS:
+        # 40px occurs twice for iPad (20@2x and 40@1x), so include size+scale in the filename.
+        safe_size = size.replace(".", "_").replace("x", "x")
+        filename = f"{prefix}-{idiom}-{safe_size}-{scale}-{pixels}.png"
+        if filename not in used_names:
+            resize(source, iconset / filename, pixels)
+            used_names.add(filename)
+        images.append({
+            "filename": filename,
+            "idiom": idiom,
+            "size": size,
+            "scale": scale,
+        })
 
-    images.append(
-        {
-            "filename": marketing.name,
-            "idiom": "ios-marketing",
-            "size": "1024x1024",
-            "scale": "1x",
-        }
-    )
+    marketing = f"{prefix}-1024.png"
+    resize(source, iconset / marketing, 1024)
+    images.append({
+        "filename": marketing,
+        "idiom": "ios-marketing",
+        "size": "1024x1024",
+        "scale": "1x",
+    })
 
-    payload = {
-        "images": images,
-        "info": {"author": "xcode", "version": 1},
-    }
-    (ICONSET / "Contents.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+    (iconset / "Contents.json").write_text(
+        json.dumps({"images": images, "info": {"author": "xcode", "version": 1}}, indent=2) + "\n",
         encoding="utf-8",
     )
+    print(f"Prepared {name} icon set at {iconset.relative_to(ROOT)}")
 
-    print(f"Original v6.99 icon verified: {SOURCE_SHA256}")
-    print("Prepared iPhone + App-Store-required iPad icon sizes from the exact same source")
+
+def main() -> None:
+    for name, spec in SOURCES.items():
+        build_icon_set(name, spec)
+
+    print("Primary icon = Original theme")
+    print("Alternate icon AppIconPink = Ružová iskra")
 
 
 if __name__ == "__main__":
