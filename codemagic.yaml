@@ -6,18 +6,23 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Generate branded app icons
+      - name: Generate original approved app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
-      - name: Prepare production release
+          echo "fe78336b9275c1767a8358a15f68fe108de0fbb72f7db94a15dbe004a94bdd69  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-original-v699.png" | shasum -a 256 -c -
+      - name: Prepare clean production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
             --web-version "6.58" \
-            --marketing-version "1.0"
+            --marketing-version "1.2"
           grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          ! grep -Fq "NFCDeepLinkRouter" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          ! grep -Fq "TFNativeAuth" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-167.png"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Show project files
         script: |
@@ -52,18 +57,23 @@ workflows:
         distribution_type: app_store
         bundle_identifier: sk.turanskefitko.app
     scripts:
-      - name: Generate branded app icons
+      - name: Generate original approved app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
-      - name: Prepare production release
+          echo "fe78336b9275c1767a8358a15f68fe108de0fbb72f7db94a15dbe004a94bdd69  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-original-v699.png" | shasum -a 256 -c -
+      - name: Prepare clean production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
             --web-version "6.58" \
-            --marketing-version "1.0"
+            --marketing-version "1.2"
           grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          ! grep -Fq "NFCDeepLinkRouter" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          ! grep -Fq "TFNativeAuth" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
+          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-167.png"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Resolve Swift packages
@@ -85,7 +95,7 @@ workflows:
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
             --scheme "TuranskeFitkoApp"
-      - name: Validate signed IPA metadata
+      - name: Validate clean signed IPA
         script: |
           IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
           test -n "$IPA_PATH"
@@ -106,17 +116,15 @@ workflows:
           test -x "$APP_PATH/$EXECUTABLE_NAME"
           test "$ICON_NAME" = "AppIcon"
           test "$DISPLAY_NAME" = "Turanské Fitko App"
-          test "$APP_VERSION" = "1.0"
+          test "$APP_VERSION" = "1.2"
           test "$BUNDLE_ID" = "sk.turanskefitko.app"
           test "$NON_EXEMPT_ENCRYPTION" = "false"
           test -f "$APP_PATH/Assets.car"
 
-          echo "Validated executable: $EXECUTABLE_NAME"
-          echo "Validated display name: $DISPLAY_NAME"
+          echo "Validated CLEAN recovery wrapper from pre-NFC native baseline"
+          echo "Validated original v6.99 app icon checksum"
           echo "Validated app version: $APP_VERSION"
           echo "Validated bundle identifier: $BUNDLE_ID"
-          echo "Validated non-exempt encryption: $NON_EXEMPT_ENCRYPTION"
-          echo "Validated icon asset: $ICON_NAME"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
