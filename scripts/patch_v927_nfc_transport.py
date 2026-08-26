@@ -86,6 +86,8 @@ def patch_content() -> None:
 
 def patch_app() -> None:
     swift = APP.read_text(encoding="utf-8")
+    if "import Foundation\n" not in swift:
+        swift = swift.replace("import SwiftUI\n", "import SwiftUI\nimport Foundation\n", 1)
 
     receive_replacement = r'''    static func receive(_ body: [String: Any]) {
         DispatchQueue.main.async {
@@ -169,7 +171,8 @@ def patch_app() -> None:
                           let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                           object["state"] != nil,
                           object["title"] != nil else {
-                        showFinalTransportError(code: error is URLError && (error as? URLError)?.code == .timedOut ? "TIMEOUT" : "NETWORK")
+                        let isTimeout = (error as? URLError)?.code == .timedOut
+                        showFinalTransportError(code: isTimeout ? "TIMEOUT" : "NETWORK")
                         return
                     }
                     showPayload(object)
