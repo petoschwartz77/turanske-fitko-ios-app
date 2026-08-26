@@ -6,28 +6,29 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Generate original approved app icons
+      - name: Generate Original + Ružová iskra icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
-          echo "fe78336b9275c1767a8358a15f68fe108de0fbb72f7db94a15dbe004a94bdd69  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-original-v699.png" | shasum -a 256 -c -
-      - name: Prepare clean production release
+          echo "fa7ac64da038befa7d59d9748cfca19879701e72b3c42f179205038cf0b3e84a  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-source.jpg" | shasum -a 256 -c -
+          echo "853b5499ccf67877aac6207e097d6fb7eab686e52c15d99231acd52d77b58f62  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIconPink.appiconset/AppIconPink-source.jpg" | shasum -a 256 -c -
+      - name: Prepare v9.26 native bridges
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "6.58" \
+            --web-version "9.26" \
             --marketing-version "1.2"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
+          python3 "$CM_BUILD_DIR/scripts/patch_v926_native_features.py"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.26" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          ! grep -Fq "NFCDeepLinkRouter" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          ! grep -Fq "TFNativeAuth" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
-          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-167.png"
+          grep -Fq "TFMNativeThemeIconV926" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "TFMNFCBridgeV926" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "tfma_native_json" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj/project.pbxproj"
+          grep -Fq "applinks:turanskefitko.sk" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
-      - name: Show project files
-        script: |
-          ls -la
-          find . -maxdepth 2 -type f | sort
       - name: Resolve Swift packages
         script: |
           xcodebuild -resolvePackageDependencies \
@@ -57,23 +58,27 @@ workflows:
         distribution_type: app_store
         bundle_identifier: sk.turanskefitko.app
     scripts:
-      - name: Generate original approved app icons
+      - name: Generate Original + Ružová iskra icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
-          echo "fe78336b9275c1767a8358a15f68fe108de0fbb72f7db94a15dbe004a94bdd69  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-original-v699.png" | shasum -a 256 -c -
-      - name: Prepare clean production release
+          echo "fa7ac64da038befa7d59d9748cfca19879701e72b3c42f179205038cf0b3e84a  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-source.jpg" | shasum -a 256 -c -
+          echo "853b5499ccf67877aac6207e097d6fb7eab686e52c15d99231acd52d77b58f62  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIconPink.appiconset/AppIconPink-source.jpg" | shasum -a 256 -c -
+      - name: Prepare v9.26 native bridges
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "6.58" \
+            --web-version "9.26" \
             --marketing-version "1.2"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=6.58" \
+          python3 "$CM_BUILD_DIR/scripts/patch_v926_native_features.py"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.26" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          ! grep -Fq "NFCDeepLinkRouter" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          ! grep -Fq "TFNativeAuth" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
-          test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-167.png"
+          grep -Fq "TFMNativeThemeIconV926" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "TFMNFCBridgeV926" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "tfma_native_json" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj/project.pbxproj"
+          grep -Fq "applinks:turanskefitko.sk" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
           test "$(/usr/libexec/PlistBuddy -c 'Print :ITSAppUsesNonExemptEncryption' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "false"
       - name: Resolve Swift packages
@@ -95,7 +100,7 @@ workflows:
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
             --scheme "TuranskeFitkoApp"
-      - name: Validate clean signed IPA
+      - name: Validate v9.26 signed IPA
         script: |
           IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
           test -n "$IPA_PATH"
@@ -120,11 +125,17 @@ workflows:
           test "$BUNDLE_ID" = "sk.turanskefitko.app"
           test "$NON_EXEMPT_ENCRYPTION" = "false"
           test -f "$APP_PATH/Assets.car"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundleAlternateIcons:AppIconPink' "$PLIST_PATH" >/dev/null
 
-          echo "Validated CLEAN recovery wrapper from pre-NFC native baseline"
-          echo "Validated original v6.99 app icon checksum"
+          ENTITLEMENTS_PATH="$VALIDATION_DIR/signed-entitlements.plist"
+          codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null
+          grep -Fq "applinks:turanskefitko.sk" "$ENTITLEMENTS_PATH"
+
           echo "Validated app version: $APP_VERSION"
-          echo "Validated bundle identifier: $BUNDLE_ID"
+          echo "Validated primary Original icon + alternate AppIconPink"
+          echo "Validated themeChanged native bridge"
+          echo "Validated NFC JSON bridge v9.26"
+          echo "Validated Universal Link entitlement: applinks:turanskefitko.sk"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
