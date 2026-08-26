@@ -6,29 +6,33 @@ workflows:
     environment:
       xcode: latest
     scripts:
-      - name: Generate branded app icons
+      - name: Generate approved app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
           python3 "$CM_BUILD_DIR/scripts/ensure_ipad_icons.py"
+          echo "99d9771aff470a6ce92ab7b26888434d2f74f1f95e07393533414ff4f92a30bb  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-approved-source.png" | shasum -a 256 -c -
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.23" \
+            --web-version "9.24" \
             --marketing-version "1.2"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.23" \
+          python3 "$CM_BUILD_DIR/scripts/patch_native_auth_v924.py"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.24" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "TFNativeAuth924" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "tfma924_native_auth_restore" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "kSecClassGenericPassword" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "configuration.websiteDataStore = .default()" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "<string>applinks:turanskefitko.sk</string>" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           grep -Fq "final class AppDelegate: UIResponder, UIApplicationDelegate" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           grep -Fq "incomingScheme == \"turanskefitko\"" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          grep -Fq "NFC načítané" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          grep -Fq "tfma_native_json" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "NFC načítané" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "tfma_native_json" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' \
             "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist" | grep -Fxq "turanskefitko"
           test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
@@ -67,29 +71,33 @@ workflows:
         distribution_type: app_store
         bundle_identifier: sk.turanskefitko.app
     scripts:
-      - name: Generate branded app icons
+      - name: Generate approved app icons
         script: |
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
           python3 "$CM_BUILD_DIR/scripts/ensure_ipad_icons.py"
+          echo "99d9771aff470a6ce92ab7b26888434d2f74f1f95e07393533414ff4f92a30bb  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-approved-source.png" | shasum -a 256 -c -
       - name: Prepare production release
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.23" \
+            --web-version "9.24" \
             --marketing-version "1.2"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.23" \
+          python3 "$CM_BUILD_DIR/scripts/patch_native_auth_v924.py"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.24" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           ! grep -Fq "dev.turanskefitko.sk" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "TFNativeAuth924" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "tfma924_native_auth_restore" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "kSecClassGenericPassword" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "configuration.websiteDataStore = .default()" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "<string>applinks:turanskefitko.sk</string>" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           grep -Fq "final class AppDelegate: UIResponder, UIApplicationDelegate" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           grep -Fq "incomingScheme == \"turanskefitko\"" \
             "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          grep -Fq "NFC načítané" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          grep -Fq "tfma_native_json" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "NFC načítané" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
+          grep -Fq "tfma_native_json" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleURLTypes:0:CFBundleURLSchemes:0' \
             "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist" | grep -Fxq "turanskefitko"
           test -f "$CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-iPad-152.png"
@@ -115,7 +123,7 @@ workflows:
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
             --scheme "TuranskeFitkoApp"
-      - name: Validate signed IPA metadata and NFC entitlement
+      - name: Validate signed IPA metadata, icon, auth and NFC entitlement
         script: |
           IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
           test -n "$IPA_PATH"
@@ -147,15 +155,12 @@ workflows:
           codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null
           grep -Fq "applinks:turanskefitko.sk" "$ENTITLEMENTS_PATH"
 
-          echo "Validated executable: $EXECUTABLE_NAME"
-          echo "Validated display name: $DISPLAY_NAME"
           echo "Validated app version: $APP_VERSION"
-          echo "Validated bundle identifier: $BUNDLE_ID"
-          echo "Validated non-exempt encryption: $NON_EXEMPT_ENCRYPTION"
+          echo "Validated exact approved app icon source checksum before compilation"
+          echo "Validated native Keychain persistent-login source v9.24"
           echo "Validated custom NFC scheme: $URL_SCHEME"
-          echo "Validated icon asset: $ICON_NAME"
           echo "Validated Universal Link entitlement: applinks:turanskefitko.sk"
-          echo "Validated NFC flow: server gateway + non-blocking status rail v9.23"
+          echo "Validated NFC flow: server gateway + non-blocking status rail v9.24"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
