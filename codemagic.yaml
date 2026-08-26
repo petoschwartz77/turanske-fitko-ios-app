@@ -11,20 +11,20 @@ workflows:
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
           echo "fa7ac64da038befa7d59d9748cfca19879701e72b3c42f179205038cf0b3e84a  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-source.jpg" | shasum -a 256 -c -
           echo "853b5499ccf67877aac6207e097d6fb7eab686e52c15d99231acd52d77b58f62  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIconPink.appiconset/AppIconPink-source.jpg" | shasum -a 256 -c -
-      - name: Prepare v9.26 native bridges
+      - name: Prepare v9.27 NFC transport
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.26" \
+            --web-version "9.27" \
             --marketing-version "1.2"
           python3 "$CM_BUILD_DIR/scripts/patch_v926_native_features.py"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.26" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          ! grep -Fq "dev.turanskefitko.sk" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          python3 "$CM_BUILD_DIR/scripts/patch_v927_nfc_transport.py"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.27" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          ! grep -Fq "dev.turanskefitko.sk" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "TFMNativeThemeIconV926" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "tfma927_nfc_process" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "nativeCookieFallback" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           grep -Fq "TFMNFCBridgeV926" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          grep -Fq "tfma_native_json" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj/project.pbxproj"
           grep -Fq "applinks:turanskefitko.sk" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
@@ -63,20 +63,19 @@ workflows:
           python3 "$CM_BUILD_DIR/scripts/generate_app_icons.py"
           echo "fa7ac64da038befa7d59d9748cfca19879701e72b3c42f179205038cf0b3e84a  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIcon.appiconset/AppIcon-source.jpg" | shasum -a 256 -c -
           echo "853b5499ccf67877aac6207e097d6fb7eab686e52c15d99231acd52d77b58f62  $CM_BUILD_DIR/TuranskeFitkoApp/Assets.xcassets/AppIconPink.appiconset/AppIconPink-source.jpg" | shasum -a 256 -c -
-      - name: Prepare v9.26 native bridges
+      - name: Prepare v9.27 NFC transport
         script: |
           python3 "$CM_BUILD_DIR/scripts/prepare_release.py" \
-            --web-version "9.26" \
+            --web-version "9.27" \
             --marketing-version "1.2"
           python3 "$CM_BUILD_DIR/scripts/patch_v926_native_features.py"
-          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.26" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          ! grep -Fq "dev.turanskefitko.sk" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          python3 "$CM_BUILD_DIR/scripts/patch_v927_nfc_transport.py"
+          grep -Fq "https://turanskefitko.sk/?tfm_mobile_app=1&native=ios&tfma_v=9.27" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          ! grep -Fq "dev.turanskefitko.sk" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "TFMNativeThemeIconV926" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
           grep -Fq "AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
-          grep -Fq "TFMNFCBridgeV926" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
-          grep -Fq "tfma_native_json" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "tfma927_nfc_process" "$CM_BUILD_DIR/TuranskeFitkoApp/ContentView.swift"
+          grep -Fq "nativeCookieFallback" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.swift"
           grep -Fq "ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIconPink" "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj/project.pbxproj"
           grep -Fq "applinks:turanskefitko.sk" "$CM_BUILD_DIR/TuranskeFitkoApp/TuranskeFitkoApp.entitlements"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleDisplayName' "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist")" = "Turanské Fitko App"
@@ -89,8 +88,7 @@ workflows:
       - name: Set unique build number
         script: |
           BUILD_NUMBER=$(date -u +%Y%m%d%H%M)
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
-            "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CM_BUILD_DIR/TuranskeFitkoApp/Info.plist"
           echo "Using build number: $BUILD_NUMBER"
       - name: Set up code signing
         script: |
@@ -100,16 +98,14 @@ workflows:
           xcode-project build-ipa \
             --project "$CM_BUILD_DIR/TuranskeFitkoApp.xcodeproj" \
             --scheme "TuranskeFitkoApp"
-      - name: Validate v9.26 signed IPA
+      - name: Validate v9.27 signed IPA
         script: |
           IPA_PATH=$(find "$CM_BUILD_DIR/build/ios/ipa" -name "*.ipa" -print -quit)
           test -n "$IPA_PATH"
-
           VALIDATION_DIR=$(mktemp -d)
           unzip -q "$IPA_PATH" -d "$VALIDATION_DIR"
           APP_PATH=$(find "$VALIDATION_DIR/Payload" -maxdepth 1 -name "*.app" -print -quit)
           test -n "$APP_PATH"
-
           PLIST_PATH="$APP_PATH/Info.plist"
           EXECUTABLE_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$PLIST_PATH")
           ICON_NAME=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$PLIST_PATH")
@@ -117,7 +113,6 @@ workflows:
           APP_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST_PATH")
           BUNDLE_ID=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$PLIST_PATH")
           NON_EXEMPT_ENCRYPTION=$(/usr/libexec/PlistBuddy -c "Print :ITSAppUsesNonExemptEncryption" "$PLIST_PATH")
-
           test -x "$APP_PATH/$EXECUTABLE_NAME"
           test "$ICON_NAME" = "AppIcon"
           test "$DISPLAY_NAME" = "Turanské Fitko App"
@@ -126,15 +121,12 @@ workflows:
           test "$NON_EXEMPT_ENCRYPTION" = "false"
           test -f "$APP_PATH/Assets.car"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundleAlternateIcons:AppIconPink' "$PLIST_PATH" >/dev/null
-
           ENTITLEMENTS_PATH="$VALIDATION_DIR/signed-entitlements.plist"
           codesign -d --entitlements :- "$APP_PATH" > "$ENTITLEMENTS_PATH" 2>/dev/null
           grep -Fq "applinks:turanskefitko.sk" "$ENTITLEMENTS_PATH"
-
           echo "Validated app version: $APP_VERSION"
-          echo "Validated primary Original icon + alternate AppIconPink"
-          echo "Validated themeChanged native bridge"
-          echo "Validated NFC JSON bridge v9.26"
+          echo "Validated Original + Ružová iskra alternate icons"
+          echo "Validated NFC AJAX transport + native cookie fallback v9.27"
           echo "Validated Universal Link entitlement: applinks:turanskefitko.sk"
     artifacts:
       - build/ios/ipa/*.ipa
