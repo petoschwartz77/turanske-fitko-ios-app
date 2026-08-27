@@ -148,21 +148,28 @@ workflows:
           fi
           yes | "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" >/dev/null
           echo "Android 16 SDK ready"
-      - name: Verify Android App Links release configuration
+      - name: Verify Android App Links + secure native auth
         script: |
           set -e
+          APP="$CM_BUILD_DIR/android/app/src/main/java/sk/turanskefitko/manager/MainActivity.java"
           test -f "$CM_BUILD_DIR/android/app/build.gradle"
           test -f "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           test -f "$CM_BUILD_DIR/android/app/src/main/res/drawable/ic_launcher.webp"
+          test -f "$APP"
           grep -Fq "applicationId 'sk.turanskefitko.manager'" "$CM_BUILD_DIR/android/app/build.gradle"
           grep -Fq "compileSdk 36" "$CM_BUILD_DIR/android/app/build.gradle"
           grep -Fq "targetSdk 36" "$CM_BUILD_DIR/android/app/build.gradle"
-          grep -Fq "versionCode 4" "$CM_BUILD_DIR/android/app/build.gradle"
-          grep -Fq "versionName '2.2'" "$CM_BUILD_DIR/android/app/build.gradle"
+          grep -Fq "versionCode 5" "$CM_BUILD_DIR/android/app/build.gradle"
+          grep -Fq "versionName '2.3'" "$CM_BUILD_DIR/android/app/build.gradle"
           grep -Fq 'android:autoVerify="true"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           grep -Fq 'android:host="turanskefitko.sk"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
           grep -Fq 'android:pathPrefix="/tfm-app/"' "$CM_BUILD_DIR/android/app/src/main/AndroidManifest.xml"
-          grep -Fq 'APP_PATH_PREFIX = "/tfm-app/"' "$CM_BUILD_DIR/android/app/src/main/java/sk/turanskefitko/manager/MainActivity.java"
+          grep -Fq 'APP_PATH_PREFIX = "/tfm-app/"' "$APP"
+          grep -Fq 'X-TFMA-Device-Pass' "$APP"
+          grep -Fq 'addJavascriptInterface(new NativeAuthBridge(), "TFMNativeAuth")' "$APP"
+          grep -Fq 'AndroidKeyStore' "$APP"
+          grep -Fq 'AES/GCM/NoPadding' "$APP"
+          grep -Fq 'loadFirstPartyWithNativeAuth' "$APP"
           test -n "$CM_KEYSTORE_PATH"
           test -n "$CM_KEYSTORE_PASSWORD"
           test -n "$CM_KEY_ALIAS"
@@ -183,6 +190,9 @@ workflows:
           test -n "$AAB"
           jarsigner -verify "$AAB"
           echo "AAB ready: $AAB"
+          echo "Version: 2.3 (code 5)"
+          echo "Secure Device Pass: Android Keystore AES-GCM"
+          echo "NFC/Home request header: X-TFMA-Device-Pass"
     artifacts:
       - android/app/build/outputs/bundle/release/*.aab
       - android/app/build/outputs/logs/*
