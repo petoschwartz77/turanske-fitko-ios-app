@@ -1,0 +1,33 @@
+name: Export Uber APK Signer
+
+on:
+  push:
+    branches:
+      - android-toolchain-temp
+  workflow_dispatch:
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Download official release and checksum
+        run: |
+          curl -L --fail --retry 3 \
+            -o uber-apk-signer-1.3.0.jar \
+            https://github.com/patrickfav/uber-apk-signer/releases/download/v1.3.0/uber-apk-signer-1.3.0.jar
+          curl -L --fail --retry 3 \
+            -o checksum-sha256.txt \
+            https://github.com/patrickfav/uber-apk-signer/releases/download/v1.3.0/checksum-sha256.txt
+          cat checksum-sha256.txt
+          sha256sum uber-apk-signer-1.3.0.jar
+      - name: Upload signer
+        uses: actions/upload-artifact@v4
+        with:
+          name: uber-apk-signer-1.3.0
+          path: |
+            uber-apk-signer-1.3.0.jar
+            checksum-sha256.txt
+          if-no-files-found: error
+          retention-days: 1
